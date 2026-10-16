@@ -13,6 +13,57 @@ const STATUS_POLL_MS = 1500;
 const SLIDER_THROTTLE_MS = 150;
 const CUSTOM_KEYS = new Set(['styles', 'pin']);   // edited in the Styles card
 
+// Swarm modes (docs/SWARM.md §S0): STATUS "sw" is role + unit count + mode letter, e.g. "C3H".
+const SWARM_MODES = [
+  { id: 'hive', letter: 'H', label: 'Hive',
+    help: 'Every unit shows the same eyes at the same moment. Blinks are nearly together, each a little off, like a group trying to blink in time. Next style changes all units.' },
+  { id: 'chorus', letter: 'C', label: 'Chorus',
+    help: 'All units appear, change style and vanish together. Blinks and glances are each unit\'s own. Next style changes all units.' },
+  { id: 'pack', letter: 'P', label: 'Pack',
+    help: 'The same eyes on every unit, each on its own timing. The style changes every few minutes and spreads from unit to unit. Next style changes it for all.' },
+  { id: 'scatter', letter: 'S', label: 'Scatter',
+    help: 'Each unit runs its own show, and no two show the same style at once.' },
+  { id: 'solo', letter: 'O', label: 'Solo',
+    help: 'Each unit runs its own show, as if alone. The units stay linked, ready for another mode.' },
+];
+
+/** Parses STATUS "sw" ("C3H", "F2P", "J1H"; "-" = no swarm firmware). */
+function parseSwarm(sw) {
+  if (!sw || sw === '-') return null;
+  const m = /^([CFJ])(\d+)([A-Z])?$/.exec(sw);
+  if (!m) return null;
+  return { role: m[1], units: Number(m[2]), mode: SWARM_MODES.find((x) => x.letter === m[3]) || null };
+}
+
+function buildSwarmCard() {
+  const box = $('swarmModes');
+  if (box.childElementCount) return;
+  for (const md of SWARM_MODES) {
+    box.append(el('button', { type: 'button', 'aria-pressed': 'false', 'data-mode': md.id, text: md.label,
+      onclick: () => switchSwarm(md) }));
+  }
+}
+
+function updateSwarm(st) {
+  const sw = parseSwarm(st.sw);
+  $('swarmCard').hidden = !sw;
+  if (!sw) return;
+  buildSwarmCard();
+  const role = { C: 'this unit leads', F: 'following', J: 'searching for others…' }[sw.role];
+  $('swarmMeta').textContent = sw.role === 'J' ? role : `${sw.units} unit${sw.units === 1 ? '' : 's'} · ${role}`;
+  for (const b of $('swarmModes').children) b.setAttribute('aria-pressed', String(!!sw.mode && b.dataset.mode === sw.mode.id));
+  $('swarmHelp').textContent = sw.mode ? sw.mode.help : '';
+}
+
+async function switchSwarm(md) {
+  try {
+    const r = await send(`wm${md.id}`);
+    if (r.ok) toast(`Switching the swarm to ${md.label}… every unit follows within a second or two.`);
+  } catch (e) {
+    toast(String(e.message || e), true);
+  }
+}
+
 const S = {
   schema: null,
   styles: null,          // local styles (shared/styles.json), for names and previews
@@ -317,10 +368,9 @@ function buildTiles(st) {
   const up = st.up ?? 0;
   tiles.push(['Up', up >= 3600 ? `${Math.floor(up / 3600)} h ${Math.floor((up % 3600) / 60)} min` : `${Math.floor(up / 60)} min ${up % 60} s`]);
   tiles.push(['Settings', st.dirty ? 'saving…' : 'saved']);
-  if (st.sw && st.sw !== '-') {   // swarm firmware (docs/SWARM.md): C = leading, F = following, J = searching
-    const n = Number(st.sw.slice(1)) || 1;
-    const role = { C: 'leading', F: 'following', J: 'searching' }[st.sw[0]] || st.sw;
-    tiles.push(['Swarm', st.sw[0] === 'J' ? 'searching…' : `${role}, ${n} unit${n === 1 ? '' : 's'}`]);
+  const sw = parseSwarm(st.sw);   // swarm firmware (docs/SWARM.md): C = leading, F = following, J = searching
+  if (sw) {
+    tiles.push(['Swarm', sw.role === 'J' ? 'searching' : (sw.units + ' units' + (sw.mode ? ' · ' + sw.mode.label : ''))]);
   }
   $('tiles').replaceChildren(...tiles.map(([k, v]) => el('div', { class: 'tile' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: String(v) }))));
 }
@@ -333,6 +383,7 @@ async function pollStatus(force = false) {
     buildTiles(st);
     $('pinNow').value = st.pin || '';
     if (st.rb) showRebootBar(true);
+    updateSwarm(st);
   } catch { /* the next poll retries; a real disconnect arrives as an event */ }
 }
 

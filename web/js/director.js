@@ -59,6 +59,16 @@ export function openCurve(u) {
 }
 
 /** Blink envelope (§6.4); tau = ms since blink start. */
+/** Integer hash for the humanized blinks (lowbias32; C++ humanHash, bit for bit). */
+export function humanHash(x) {
+  x = (x ^ (x >>> 16)) >>> 0;
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x = (x ^ (x >>> 15)) >>> 0;
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return x;
+}
+
 export function blinkEnv(tau, tc, th, to, depth) {
   if (tau < 0) return 0;
   if (tau < tc) { const x = tau / tc; return depth * x * x; }
@@ -304,6 +314,8 @@ export class Director {
     // Swarm (docs/SWARM.md §S8): slaved is a level; an Appear cue restarts the director from the
     // swarm's seed at this exact tick, so every unit of a Chorus-Hive swarm runs the same show.
     this.slaved = !!(inputs && inputs.slaved);
+    this.prefer = (inputs && inputs.prefer && Number.isInteger(inputs.preferStyle) && inputs.preferStyle >= 0 &&
+      inputs.preferStyle < this.count) ? inputs.preferStyle : -1;
     if (inputs && inputs.cue === CUE_APPEAR && this.count > 0) this.hiveAppear(nowMs, inputs.cueStyle, inputs.cueSeed);
     const now = nowMs;
     let dt = now - this.lastNow;
@@ -359,6 +371,10 @@ export class Director {
           this.nextStyle = this.forced;
           this.shortenDark(now);
         }
+      } else if (this.prefer >= 0 && this.ph === Phase.Dark && this.nextStyle !== this.prefer) {
+        // A soft pin (Pack, Scatter): retarget the next Appear, without ending Dark early.
+        this.returnNextToBag();
+        this.nextStyle = this.prefer;
       }
       if (inBlink && this.ph === Phase.Watch) this.forceBlink(now);
     }
@@ -451,6 +467,8 @@ export class Director {
     this.nextFromBag = false;
     if (this.forced >= 0) {
       this.nextStyle = this.forced;
+    } else if (this.prefer >= 0) {
+      this.nextStyle = this.prefer;
     } else {
       this.nextStyle = this.bagNext();
       this.nextFromBag = true;
@@ -522,6 +540,7 @@ export class Director {
   transitionSwap(now) {
     this.transSwapped = true;
     let ns = this.forced;
+    if (ns < 0) ns = this.prefer;
     if (ns < 0) ns = this.bagNext();
     this.setStyle(ns);
     this.frameFullClear = true;
@@ -715,6 +734,8 @@ export class Director {
     this.burstEnd = 0;
     this.blinkL = 0;
     this.blinkR = 0;
+    this.outL = 0;
+    this.outR = 0;
   }
 
   /** Record one blink (no draws). Replaces the earliest-ending record when all slots are busy. */
@@ -801,8 +822,11 @@ export class Director {
   /** Per-eye blink values (max over overlapping blinks); frees finished records. */
   evalBlinks(now) {
     const lag = this.styles[this.style].behavior.lagMs;
+    const salt = this.humanSalt >>> 0;
     let bL = 0;
     let bR = 0;
+    let oL = 0;
+    let oR = 0;
     for (let i = 0; i < BLINK_SLOTS; i++) {
       const b = this.blinks[i];
       if (!b.active) continue;
@@ -816,10 +840,38 @@ export class Director {
         const v = blinkEnv(tau - lag, b.tc, b.th, b.to, b.depth);
         if (v > bR) bR = v;
       }
+      if (salt !== 0) {
+        // The drawn blink (C++ evalBlinks): 0-60 ms late, closing +-10 %, ending with the shared one.
+        const h = humanHash((salt ^ (Math.trunc(b.start * 4) >>> 0)) >>> 0);
+        const u1 = (h & 0xFFFF) / 65536;
+        const u2 = (h >>> 16) / 65536;
+        let d = 60 * u1;
+        const tc = b.tc * (0.9 + 0.2 * u2);
+        let to = b.to - d - (tc - b.tc);
+        if (to < 0.5 * b.to) {
+          to = 0.5 * b.to;
+          d = b.to - to - (tc - b.tc);
+          if (d < 0) d = 0;
+        }
+        const ht = tau - d;
+        if (b.mask & MASK_L) {
+          const v = blinkEnv(ht, tc, b.th, to, b.depth);
+          if (v > oL) oL = v;
+        }
+        if (b.mask & MASK_R) {
+          const v = blinkEnv(ht - lag, tc, b.th, to, b.depth);
+          if (v > oR) oR = v;
+        }
+      }
     }
     this.blinkL = bL;
     this.blinkR = bR;
+    this.outL = salt !== 0 ? oL : bL;
+    this.outR = salt !== 0 ? oR : bR;
   }
+
+  /** Humanized blinks (C++ setHumanize): 0 = off. Not reset by begin. */
+  setHumanize(salt) { this.humanSalt = salt >>> 0; }
 
   // ---------------------------------------------------------------------------
   // Watch generators
@@ -1394,7 +1446,7 @@ export class Director {
       es.vergence = S.gaze.vergence + verg - (isR ? S.behavior.lagOffset : 0);
       const droop = isR ? S.behavior.droopR : S.behavior.droopL;
       es.openness = this.appearOpen * (1 - 0.3 * squintEnv) * (1 - droop) + widen;
-      const bg = isR ? this.blinkR : this.blinkL;
+      const bg = isR ? this.outR : this.outL;   // as drawn (humanized blinks, setHumanize)
       es.blink = bg > this.appearBlink ? bg : this.appearBlink;
       es.pupil = this.pupilP;
       es.intensity = intensity;

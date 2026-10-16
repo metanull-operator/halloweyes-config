@@ -3,7 +3,7 @@
 // like a real unit. DOM-free; usable from Node with injected styles.
 
 import { Director } from '../director.js';
-import { DemoDevice, PROFILES } from './protocol.js';
+import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js';
 import { schemaHash } from './settings_schema.js';
 
 const TICK_MS = 1000 / 24;
@@ -117,7 +117,8 @@ export class MockLink {
       ph: fs ? PHASES[fs.phase] : 'Dark', st, pin: this.pinned >= 0 ? this.styles[this.pinned].id : '',
       mode: d.mode, pwr: 'Show', bri: Number(d.values.night.toFixed(2)), lmv: caps.has('ldr') ? 640 : 0,
       vb: caps.has('vbat') ? 3940 : 0, fps: 24.0, up: Math.floor((Date.now() - this.bootMs) / 1000),
-      dirty: d.dirty.size ? 1 : 0, rb: d.rebootNeeded ? 1 : 0, sw: '-',
+      dirty: d.dirty.size ? 1 : 0, rb: d.rebootNeeded ? 1 : 0,
+      sw: d.swarm ? `C3${SWARM_MODE_LETTERS[SWARM_MODE_NAMES.indexOf(d.swarmMode)]}` : '-',   // a demo swarm of 3, this unit leading
     });
   }
 

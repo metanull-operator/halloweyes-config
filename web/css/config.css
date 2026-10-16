@@ -143,6 +143,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
 .seg button { border: 0; border-radius: 0; min-height: 40px; background: transparent; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+.seg-wrap { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); margin-top: 8px; }
+.seg-wrap button + button { border-left: 0; }
+.seg-wrap button { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 
 /* Switch */
 .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; font-weight: 600; }

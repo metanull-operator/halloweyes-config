@@ -21,6 +21,8 @@ export const UUID = Object.freeze({
 });
 
 export const MAX_LINE = 120;     // console::kMaxLine
+export const SWARM_MODE_NAMES = Object.freeze(['solo', 'hive', 'chorus', 'pack', 'scatter']);   // swarm::Mode order
+export const SWARM_MODE_LETTERS = 'OHCPS';                                                     // STATUS "sw" letter
 export const MAX_REPLY = 120;    // console::kMaxReply
 export const INFO_MAX = 512;     // §B5 budgets
 export const SETTINGS_MAX = 512;
@@ -50,6 +52,7 @@ export function parseReply(line) {
 /** Build profiles: capabilities as the firmware reports them in INFO (ble_config.cpp buildInfo). */
 export const PROFILES = Object.freeze({
   poc: { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'] },
+  'poc-swarm': { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'], swarm: true },   // poc_swarm env
   oled: { build: 'oled', panel: 'ssd1351', caps: ['ble', 'boot', 'card'] },
   'full-battery': { build: 'full-battery', panel: 'gc9a01', caps: ['ldr', 'pir', 'vbat', 'ble', 'lcd', 'reed', 'card'] },
   'full-usb': { build: 'full-usb', panel: 'gc9a01', caps: ['ldr', 'pir', 'ble', 'lcd', 'reed', 'card'] },
@@ -74,6 +77,8 @@ export class DemoDevice {
     for (const d of this.defs) this.defaults[d.key] = defaultValue(d, this.styleIds.length);
     this.values = { ...this.defaults };
     this.mode = 'Auto';                 // "always" lives in the power module
+    this.swarm = !!this.profile.swarm;  // swarm firmware (HE_SWARM): wm<mode>
+    this.swarmMode = 'hive';
     this.stored = {};                   // NVS image (keys that differ from the default)
     this.dirty = new Set();
     this.lastSetMs = 0;
@@ -192,6 +197,16 @@ export class DemoDevice {
       if (l === 't') this.mode = this.mode === 'Always' ? 'Auto' : 'Always';
       this.actions({ [single[l]]: true });
       return `ok ${l}`;
+    }
+    if (l[0] === 'w') {   // console.cpp: swarm builds only; over BLE only wm<mode> (w alone is serial)
+      if (this.swarm && l[1] === 'm' && l.length > 2) {
+        const name = l.slice(2);
+        if (!SWARM_MODE_NAMES.includes(name)) return 'err range wm';
+        this.swarmMode = name;
+        this.actions({ swarmMode: name });
+        return `ok wm ${name}`;
+      }
+      return 'err cmd';
     }
     if (l === 's') { this.actions({ autoStyle: true }); return 'ok s'; }
     if (l[0] === 's' && l[1] !== '?') {

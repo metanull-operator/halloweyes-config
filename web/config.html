@@ -31,6 +31,7 @@
         <div class="row">
           <select id="demoProfile">
             <option value="poc">PoC build (LCD)</option>
+            <option value="poc-swarm">PoC build in a swarm</option>
             <option value="oled">OLED build</option>
             <option value="full-battery">Full build, battery</option>
             <option value="full-usb">Full build, USB</option>
@@ -49,6 +50,15 @@
         </div>
         <div class="tiles" id="tiles"></div>
         <p id="schemaWarn" class="notice warn" hidden></p>
+      </section>
+
+      <section class="card" id="swarmCard" aria-labelledby="swarmTitle" hidden>
+        <div class="card-head">
+          <h2 id="swarmTitle">Swarm</h2>
+          <span id="swarmMeta" class="meta"></span>
+        </div>
+        <div class="seg seg-wrap" id="swarmModes" role="group" aria-label="Swarm mode"></div>
+        <p class="help" id="swarmHelp"></p>
       </section>
 
       <section class="card" aria-labelledby="ctlTitle">
