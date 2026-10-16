@@ -308,7 +308,7 @@ export class Director {
    * Advance to nowMs and return the FrameState. The returned object is owned by the
    * Director and reused every call (copy it to keep it).
    * @param {number} nowMs
-   * @param {{pir?:boolean,nextStyle?:boolean,forceBlink?:boolean,forceStartle?:boolean,forceStyle?:number}} inputs
+   * @param {{pir?:boolean,nextStyle?:boolean,forceBlink?:boolean,forceStartle?:boolean,forceAppear?:boolean,forceStyle?:number}} inputs
    */
   update(nowMs, inputs) {
     // Swarm (docs/SWARM.md §S8): slaved is a level; an Appear cue restarts the director from the
@@ -329,6 +329,7 @@ export class Director {
     const inNext = !!(inputs && inputs.nextStyle);
     const inBlink = !!(inputs && inputs.forceBlink);
     const inStartle = !!(inputs && inputs.forceStartle);
+    const inAppear = !!(inputs && inputs.forceAppear);
     let forced = -1;
     if (inputs && Number.isInteger(inputs.forceStyle)) forced = inputs.forceStyle;
     if (forced >= this.count) forced = -1;
@@ -377,6 +378,7 @@ export class Director {
         this.nextStyle = this.prefer;
       }
       if (inBlink && this.ph === Phase.Watch) this.forceBlink(now);
+      if (inAppear && this.ph === Phase.Dark) this.darkEnd = now;   // appear now, with the style already picked
     }
 
     // 2. Phase timers (at most one change per step; loop covers chained zero-length cases)

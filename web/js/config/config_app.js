@@ -466,6 +466,7 @@ async function runCmd(cmd) {
   try {
     const r = await send(cmd);
     if (r.ok && cmd === 'c') toast('Test card on the unit for 30 seconds');
+    if (r.ok && cmd === 'a') toast('If the eyes are closed, they open within a second (in Hive and Chorus, on every unit)');
   } catch (e) {
     toast(String(e.message || e), true);
   }

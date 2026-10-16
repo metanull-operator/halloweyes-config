@@ -52,7 +52,8 @@ export function parseReply(line) {
 /** Build profiles: capabilities as the firmware reports them in INFO (ble_config.cpp buildInfo). */
 export const PROFILES = Object.freeze({
   poc: { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'] },
-  'poc-swarm': { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'], swarm: true },   // poc_swarm env
+  'poc-swarm': { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'], swarm: true,
+    defaults: { bleWin: 0 } },   // poc_swarm env (config.h: swarm builds are always connectable)
   oled: { build: 'oled', panel: 'ssd1351', caps: ['ble', 'boot', 'card'] },
   'full-battery': { build: 'full-battery', panel: 'gc9a01', caps: ['ldr', 'pir', 'vbat', 'ble', 'lcd', 'reed', 'card'] },
   'full-usb': { build: 'full-usb', panel: 'gc9a01', caps: ['ldr', 'pir', 'ble', 'lcd', 'reed', 'card'] },
@@ -75,6 +76,7 @@ export class DemoDevice {
     this.defs = this.schema.settings.filter((d) => available(d, this.caps));
     this.defaults = {};
     for (const d of this.defs) this.defaults[d.key] = defaultValue(d, this.styleIds.length);
+    Object.assign(this.defaults, this.profile.defaults || {});   // build-specific defaults (config.h)
     this.values = { ...this.defaults };
     this.mode = 'Auto';                 // "always" lives in the power module
     this.swarm = !!this.profile.swarm;  // swarm firmware (HE_SWARM): wm<mode>
@@ -192,7 +194,7 @@ export class DemoDevice {
       return 'ok defaults reboot';
     }
     if (l === 'reboot') { this.actions({ reboot: true }); return 'ok reboot'; }
-    const single = { n: 'next', b: 'blink', p: 'startle', t: 'toggle', v: 'selftest', c: 'testCard' };
+    const single = { n: 'next', b: 'blink', p: 'startle', a: 'appear', t: 'toggle', v: 'selftest', c: 'testCard' };
     if (l.length === 1 && single[l] && (l !== 'c' || this.caps.has('card'))) {
       if (l === 't') this.mode = this.mode === 'Always' ? 'Auto' : 'Always';
       this.actions({ [single[l]]: true });

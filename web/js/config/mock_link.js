@@ -57,7 +57,8 @@ export class MockLink {
     const p = this.pending;
     this.pending = {};
     this.fs = this.director.update(this.simMs, {
-      pir: false, nextStyle: !!p.next, forceBlink: !!p.blink, forceStartle: !!p.startle, forceStyle: this.pinned,
+      pir: false, nextStyle: !!p.next, forceBlink: !!p.blink, forceStartle: !!p.startle, forceAppear: !!p.appear,
+      forceStyle: this.pinned,
     });
   }
 
@@ -65,6 +66,7 @@ export class MockLink {
     if (a.next) this.pending.next = true;
     if (a.blink) this.pending.blink = true;
     if (a.startle) this.pending.startle = true;
+    if (a.appear) this.pending.appear = true;
     if (a.autoStyle) this.pinned = -1;
     if (Number.isInteger(a.style)) this.pinned = a.style;
     if (a.apply === 'restart') this.startShow();
