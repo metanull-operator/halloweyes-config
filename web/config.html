@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0d0f0c">
+  <title>halloweyes config</title>
+  <link rel="stylesheet" href="css/config.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand"><span class="eyes" aria-hidden="true"><i></i><i></i></span><span>halloweyes</span><small>config</small></div>
+    <div class="conn">
+      <span id="connPill" class="pill off" role="status">Not connected</span>
+      <button id="disconnectBtn" class="ghost small" hidden>Disconnect</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- Not connected -->
+    <section id="welcome" class="card hero">
+      <h1>Set up your eyes from your phone</h1>
+      <p class="lead">Connect to a halloweyes unit over Bluetooth to change its brightness, styles, schedule and orientation, with a live preview of every style.</p>
+      <div id="btSupport" class="notice" hidden></div>
+      <button id="connectBtn" class="primary big">Connect to a unit</button>
+      <p class="hint">The unit is connectable for 5 minutes after it powers up. Press <b>RESET</b> on the XIAO to open the window again.</p>
+      <div class="divider"><span>or</span></div>
+      <div class="demo-row">
+        <label for="demoProfile">Try a demo unit</label>
+        <div class="row">
+          <select id="demoProfile">
+            <option value="poc">PoC build (LCD)</option>
+            <option value="oled">OLED build</option>
+            <option value="full-battery">Full build, battery</option>
+            <option value="full-usb">Full build, USB</option>
+          </select>
+          <button id="demoBtn" class="secondary">Start demo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Connected -->
+    <div id="connected" hidden>
+      <section class="card" id="statusCard" aria-labelledby="statusTitle">
+        <div class="card-head">
+          <h2 id="statusTitle"><span id="devName">Unit</span></h2>
+          <span id="devMeta" class="meta"></span>
+        </div>
+        <div class="tiles" id="tiles"></div>
+        <p id="schemaWarn" class="notice warn" hidden></p>
+      </section>
+
+      <section class="card" aria-labelledby="ctlTitle">
+        <h2 id="ctlTitle">Show controls</h2>
+        <div class="btn-grid">
+          <button data-cmd="n" class="secondary">Next style</button>
+          <button data-cmd="b" class="secondary">Blink</button>
+          <button data-cmd="p" class="secondary">Startle</button>
+          <button data-cmd="c" class="secondary" id="cardBtn">Test card <small>30 s</small></button>
+        </div>
+        <div class="field">
+          <label for="pinNow">Show only</label>
+          <select id="pinNow"><option value="">Shuffle (all enabled styles)</option></select>
+          <p class="help">Pins a style until the next power cycle. To keep it after a reboot, use <i>Pinned at boot</i> under Styles.</p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="stylesTitle">
+        <h2 id="stylesTitle">Styles</h2>
+        <div class="preview-wrap">
+          <canvas id="livePreview" aria-label="Animated preview of the selected style"></canvas>
+          <div class="preview-info">
+            <div class="preview-name" id="previewName"></div>
+            <div class="preview-actions">
+              <button id="showNowBtn" class="secondary small">Show on unit now</button>
+              <label class="switch small"><input type="checkbox" id="bootPin"><span></span>Pinned at boot</label>
+            </div>
+          </div>
+        </div>
+        <p class="help">Tap a style to preview it. The checkbox puts it in the shuffle or takes it out.</p>
+        <div class="style-grid" id="styleGrid"></div>
+      </section>
+
+      <div id="groups"></div>
+
+      <section class="card" aria-labelledby="maintTitle">
+        <h2 id="maintTitle">Maintenance</h2>
+        <div class="btn-grid">
+          <button id="saveBtn" class="secondary">Save now</button>
+          <button id="rebootBtn" class="secondary">Reboot</button>
+          <button id="defaultsBtn" class="danger">Factory defaults</button>
+        </div>
+        <p class="help">Changes are saved on the unit automatically a few seconds after you make them.</p>
+        <details class="log">
+          <summary>Activity</summary>
+          <ol id="log"></ol>
+        </details>
+      </section>
+    </div>
+
+    <!-- Disconnected after being connected -->
+    <section id="lost" class="card hero" hidden>
+      <h2 id="lostTitle">Disconnected</h2>
+      <p id="lostText" class="lead"></p>
+      <div class="btn-grid">
+        <button id="reconnectBtn" class="primary">Reconnect</button>
+        <button id="homeBtn" class="ghost">Back</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="rebootBar" class="sticky-bar" hidden>
+    <span>Some changes take effect after a reboot.</span>
+    <button id="rebootNowBtn" class="primary small">Reboot now</button>
+  </div>
+
+  <dialog id="pinDialog">
+    <form method="dialog">
+      <h2>PIN required</h2>
+      <p>This unit has a PIN. Enter it to make changes.</p>
+      <input id="pinInput" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN">
+      <div class="btn-grid">
+        <button value="cancel" class="ghost">Cancel</button>
+        <button value="ok" class="primary" id="pinOk">Unlock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="alert" hidden></div>
+
+  <script type="module" src="js/config/config_app.js"></script>
+</body>
+</html>
