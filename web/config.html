@@ -113,6 +113,15 @@
             <select id="pinNow"><option value="">Shuffle (all enabled styles)</option></select>
             <p class="help" id="pinNowHelp">Pins a style until the next power cycle. To keep it after a reboot, use <i>Pinned at boot</i> under Styles.</p>
           </div>
+          <div class="field" id="routineField">
+            <label for="routinePick">Demo routine</label>
+            <div class="row">
+              <select id="routinePick"></select>
+              <button id="routinePlayBtn" class="secondary">Play demo</button>
+              <button id="routineStopBtn" class="ghost">Stop</button>
+            </div>
+            <p class="help" id="routineHelp">A scripted show: the eyes appear, look, wink and change creature on cue, the same every time. The normal show comes back when it ends. In a swarm it plays on this unit only.</p>
+          </div>
         </section>
 
         <section class="card" aria-labelledby="stylesTitle">

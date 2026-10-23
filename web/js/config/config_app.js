@@ -6,6 +6,7 @@ import { parseReply } from './protocol.js';
 import { BleLink, bluetoothSupport } from './ble_link.js';
 import { MockLink } from './mock_link.js';
 import { loadStyles } from '../styles.js';
+import { compileRoutine } from '../routine.js';
 import { drawThumbnail, LivePreview } from './preview.js';
 
 const $ = (id) => document.getElementById(id);
@@ -141,6 +142,7 @@ async function switchSwarm(md) {
 const S = {
   schema: null,
   styles: null,          // local styles (shared/styles.json), for names and previews
+  routines: null,        // shared/routines.json (Play demo); null if it did not load
   link: null,
   info: null,
   caps: new Set(),
@@ -584,6 +586,8 @@ async function runCmd(cmd) {
   try {
     const r = await send(cmd);
     if (r.ok && cmd === 'c') toast('Test card on the unit for 30 seconds');
+    if (r.ok && cmd === 'r') toast('Routine stopped: the normal show takes over');
+    if (r.ok && /^r[a-z]/.test(cmd)) toast(`Playing ${$('routinePick').selectedOptions[0]?.textContent || cmd.slice(1)}`);
     if (r.ok && cmd === 'a') toast('If the eyes are closed, they open within a second');
     if (r.ok && cmd === 'identify') toast('This unit blinks 3 times (as soon as its eyes are open)');
     const every = { wa: 'Closed eyes open on every unit', wn: 'Every unit moves to the next style',
@@ -669,7 +673,7 @@ function onLost() {
 
 async function connect(kind) {
   const profile = $('demoProfile').value;
-  const link = kind === 'ble' ? new BleLink() : new MockLink({ schema: S.schema, styles: S.styles, profile, name: 'HE-DEMO' });
+  const link = kind === 'ble' ? new BleLink() : new MockLink({ schema: S.schema, styles: S.styles, routines: S.routines, profile, name: 'HE-DEMO' });
   link.onDisconnect = onLost;
   setPill('Connecting…', 'busy');
   try {
@@ -722,6 +726,8 @@ function wire() {
     $(S.view === 'swarm' ? 'tabSwarm' : 'tabUnit').focus();
   });
   $('pinNow').addEventListener('change', (e) => runCmd(e.target.value ? `s${e.target.value}` : 's'));
+  $('routinePlayBtn').addEventListener('click', () => { if ($('routinePick').value) runCmd(`r${$('routinePick').value}`); });
+  $('routineStopBtn').addEventListener('click', () => runCmd('r'));
   $('showNowBtn').addEventListener('click', () => runCmd(`s${S.info.styles[S.selected]}`));
   $('bootPin').addEventListener('change', async (e) => {
     const id = S.info.styles[S.selected];
@@ -760,6 +766,29 @@ function showSupport() {
   $('connectBtn').disabled = true;
 }
 
+/** shared/routines.json for Play demo (docs/ROUTINES.md §R8); the page works without it. */
+async function loadRoutines() {
+  try {
+    const r = await fetch('../shared/routines.json');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const doc = await r.json();
+    return Array.isArray(doc.routines) && doc.routines.length ? doc : null;
+  } catch (e) {
+    log(`routines.json: ${e.message || e}`, true);
+    return null;
+  }
+}
+
+function buildRoutines() {
+  $('routineField').hidden = !S.routines;
+  if (!S.routines) return;
+  $('routinePick').replaceChildren(...S.routines.routines.map((r) => {
+    const prog = compileRoutine(S.routines, r.id, S.styles);
+    const len = prog.errors.length ? '' : ` (${Math.round(prog.lengthMs / 1000)} s)`;
+    return el('option', { value: r.id, text: `${prog.name}${len}` });
+  }));
+}
+
 async function main() {
   wire();
   showSupport();
@@ -772,6 +801,8 @@ async function main() {
     $('demoBtn').disabled = true;
     throw e;
   }
+  S.routines = await loadRoutines();
+  buildRoutines();
   showScreen('welcome');
   if (new URLSearchParams(location.search).has('demo')) {
     const p = new URLSearchParams(location.search).get('demo');

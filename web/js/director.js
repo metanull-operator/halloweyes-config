@@ -20,6 +20,8 @@
 //   - Bag: a sole remaining item equal to lastPlayed is discarded (else a jump-scare could repeat
 //     hellfire); a bag pick replaced by a jump-scare or a pin in Dark is returned to the front.
 //   - Jump-scare from Dark also requires lastPlayed != hellfire (no consecutive repeat).
+//   - Directed gaze (lookOn/lookX/lookY/lookMs, §6.5.1) is draw-free and replaces the random
+//     fixations, queued saccades and the gaze-moving events (LookAround, Sweep) while it is held.
 
 import { Phase, BlinkKind, GazeKind, StartleMode, EventType, EV_COUNT, R_DISP_MM } from './constants.js';
 import { clamp, lerp, smoothstep, len } from './mathutil.js';
@@ -38,6 +40,8 @@ export const TRANS_CLOSE_MS = 300;
 export const TRANS_OPEN_MS = 500;
 export const DARK_FIRST_MS = 1500;
 export const DARK_SHORT_MS = 500;           // nextStyle / pin change in Dark
+export const WINK_HOLD_MIN_MS = 150;        // forceWink: the closed hold, at least (reads as a wink, not a twitch)
+export const LOOK_EPS = 0.001;              // directed gaze: |cur - target| that counts as "there"
 export const PIR_RECENT_MS = 120000;
 const DBL_TC = 90, DBL_TH = 40, DBL_TO = 160;  // Vanish DOUBLE blinks (no jitter)
 const TWO_PI = 2 * Math.PI;
@@ -118,7 +122,8 @@ function makeSacEntry() {
 // Swarm cues (docs/SWARM.md §S8; C++ kCue*): inputs.cue, with cueStyle and cueSeed for Appear.
 export const CUE_NONE = 0;
 export const CUE_APPEAR = 1;   // restart from cueSeed and appear with cueStyle, in any phase
-export const CUE_VANISH = 2;   // vanish now (Appear, Watch, Transition; ignored otherwise)
+export const CUE_VANISH = 2;   // vanish now (Appear, Watch, Transition; scripted: also Startle; ignored otherwise)
+export const CUE_RESET = 3;    // restart from cueSeed, dark (a routine's first update, docs/ROUTINES.md)
 
 export class Director {
   /**
@@ -223,6 +228,14 @@ export class Director {
     this.blinkL = 0;
     this.blinkR = 0;
 
+    // Directed gaze (§6.5.1): the held target (lookOn) and this update's input (lookIn*)
+    this.lookOn = false;
+    this.lookTX = 0; this.lookTY = 0;
+    this.lookTMs = 0;
+    this.lookInOn = false;
+    this.lookInX = 0; this.lookInY = 0;
+    this.lookInMs = 0;
+
     // Gaze (§6.5)
     this.curX = 0; this.curY = 0;
     this.fromX = 0; this.fromY = 0;
@@ -230,6 +243,7 @@ export class Director {
     this.sacStart = 0;
     this.sacDur = 60;
     this.saccading = false;
+    this.sacSmooth = false;                 // smoothstep motion (a directed look with a duration)
     this.fixUntil = nowMs;
     this.microX = 0; this.microY = 0;
     this.nextMicroAt = nowMs;
@@ -285,13 +299,14 @@ export class Director {
   /**
    * Swarm Appear cue (C++ hiveAppear): a full restart from the shared seed at nowMs, then the
    * RNG again from that seed, so every unit that gets the cue on the same tick runs the same show.
+   * openMs > 0 replaces the drawn open duration (routines, docs/ROUTINES.md); 0 = drawn.
    */
-  hiveAppear(nowMs, style, seed) {
+  hiveAppear(nowMs, style, seed, openMs = 0) {
     this.begin(this.styles, seed >>> 0, nowMs, this.spacingMm, this.rDispMm);
     this.rng.seed(seed >>> 0);
     this.nextStyle = (Number.isInteger(style) && style >= 0 && style < this.count) ? style : 0;
     this.nextFromBag = false;
-    this.enterAppear(this.lastNow);
+    this.enterAppear(this.lastNow, openMs > 0 ? openMs : 0);
   }
 
   get phase() { return this.ph; }
@@ -308,15 +323,38 @@ export class Director {
    * Advance to nowMs and return the FrameState. The returned object is owned by the
    * Director and reused every call (copy it to keep it).
    * @param {number} nowMs
-   * @param {{pir?:boolean,nextStyle?:boolean,forceBlink?:boolean,forceStartle?:boolean,forceAppear?:boolean,forceStyle?:number}} inputs
+   * @param {{pir?:boolean,nextStyle?:boolean,forceBlink?:boolean,forceWink?:number,forceStartle?:boolean,
+   *   forceAppear?:boolean,forceStyle?:number,lookOn?:boolean,lookX?:number,lookY?:number,lookMs?:number,
+   *   scripted?:boolean}} inputs
    */
   update(nowMs, inputs) {
     // Swarm (docs/SWARM.md §S8): slaved is a level; an Appear cue restarts the director from the
     // swarm's seed at this exact tick, so every unit of a Chorus-Hive swarm runs the same show.
-    this.slaved = !!(inputs && inputs.slaved);
+    // scripted (routines, docs/ROUTINES.md) is slaved, plus: no startle refractory, and a startle
+    // always returns to Watch (the routine's own Vanish cue closes the eyes).
+    this.scripted = !!(inputs && inputs.scripted);
+    this.slaved = !!(inputs && inputs.slaved) || this.scripted;
     this.prefer = (inputs && inputs.prefer && Number.isInteger(inputs.preferStyle) && inputs.preferStyle >= 0 &&
       inputs.preferStyle < this.count) ? inputs.preferStyle : -1;
-    if (inputs && inputs.cue === CUE_APPEAR && this.count > 0) this.hiveAppear(nowMs, inputs.cueStyle, inputs.cueSeed);
+    if (inputs && inputs.cue === CUE_RESET && this.count > 0) {
+      this.begin(this.styles, inputs.cueSeed >>> 0, nowMs, this.spacingMm, this.rDispMm);
+    }
+    if (inputs && inputs.cue === CUE_APPEAR && this.count > 0) {
+      const om = Number(inputs.cueOpenMs) || 0;
+      this.hiveAppear(nowMs, inputs.cueStyle, inputs.cueSeed, om > 0 ? om : 0);
+    }
+    // Directed gaze (§6.5.1): a level, like forceStyle. Applied in updateGaze.
+    this.lookInOn = !!(inputs && inputs.lookOn);
+    if (this.lookInOn) {
+      let lx = clamp(Number(inputs.lookX) || 0, -1, 1);
+      let ly = clamp(Number(inputs.lookY) || 0, -1, 1);
+      const l = len(lx, ly);
+      if (l > 1) { lx /= l; ly /= l; }
+      const lm = Number(inputs.lookMs) || 0;
+      this.lookInX = lx;
+      this.lookInY = ly;
+      this.lookInMs = lm > 0 ? lm : 0;
+    }
     const now = nowMs;
     let dt = now - this.lastNow;
     if (dt < 0) dt = 0;
@@ -328,6 +366,7 @@ export class Director {
     const inPir = !!(inputs && inputs.pir);
     const inNext = !!(inputs && inputs.nextStyle);
     const inBlink = !!(inputs && inputs.forceBlink);
+    const inWink = (inputs && Number.isInteger(inputs.forceWink)) ? (inputs.forceWink & MASK_BOTH) : 0;
     const inStartle = !!(inputs && inputs.forceStartle);
     const inAppear = !!(inputs && inputs.forceAppear);
     let forced = -1;
@@ -345,7 +384,13 @@ export class Director {
     if (inNext) this.pendingNext = true;
 
     if (inputs && inputs.cue === CUE_VANISH &&
-        (this.ph === Phase.Appear || this.ph === Phase.Watch || this.ph === Phase.Transition)) {
+        (this.ph === Phase.Appear || this.ph === Phase.Watch || this.ph === Phase.Transition ||
+         (this.scripted && this.ph === Phase.Startle))) {
+      if (this.ph === Phase.Startle) {
+        // A routine closes a startle on its beat: the widen and vergence ramp down as on a normal exit.
+        this.startleExited = true;
+        this.startleExitAt = now;
+      }
       this.enterVanish(now, false);
     }
 
@@ -378,6 +423,7 @@ export class Director {
         this.nextStyle = this.prefer;
       }
       if (inBlink && this.ph === Phase.Watch) this.forceBlink(now);
+      if (inWink !== 0 && this.ph === Phase.Watch) this.forceWink(now, inWink);
       if (inAppear && this.ph === Phase.Dark) this.darkEnd = now;   // appear now, with the style already picked
     }
 
@@ -405,6 +451,7 @@ export class Director {
   // Phase machine (§6.3)
 
   startleAllowed(now) {
+    if (this.scripted) return true;                                   // a routine's startle is on its beat
     if (!this.hasStartled) return true;
     return now - this.lastStartleAt >= STARTLE_REFRACTORY_MS;
   }
@@ -485,7 +532,8 @@ export class Director {
     }
   }
 
-  enterAppear(now) {
+  /** @param {number} openMs > 0: the open duration (a routine's Appear cue); its draw is still made. */
+  enterAppear(now, openMs = 0) {
     this.ph = Phase.Appear;
     this.phaseStart = now;
     this.appearStartAt = now;
@@ -499,6 +547,7 @@ export class Director {
     const fast = this.rng.chance(0.15);                               // (2)
     this.openDur = 150;
     if (!fast) this.openDur = this.rng.uniform(500, 1500);            // (3)
+    if (openMs > 0) this.openDur = openMs;
     const pos = this.rng.chance(0.5);                                 // (4)
     const sgn = pos ? 1 : -1;
     const mag = this.rng.uniform(0.3, 0.6);                           // (5)
@@ -619,7 +668,8 @@ export class Director {
   }
 
   exitStartle(now) {
-    const toVanish = this.rng.chance(0.6);                                            // (3)
+    let toVanish = this.rng.chance(0.6);                                              // (3)
+    if (this.scripted) toVanish = false;                                              // drawn all the same
     this.startleExited = true;
     this.startleExitAt = now;
     if (toVanish) {
@@ -821,6 +871,22 @@ export class Director {
     this.addBlink(now, tc, B.th, to, 1, MASK_BOTH);
   }
 
+  /**
+   * forceWink input (mask MASK_L / MASK_R, viewer sense; MASK_BOTH = a blink): as forceBlink, with the
+   * closed hold at least WINK_HOLD_MIN_MS. No draws.
+   */
+  forceWink(now, mask) {
+    const B = this.styles[this.style].blink;
+    if (B.kind === BlinkKind.None) return;
+    let tc = B.tc;
+    let th = B.th;
+    let to = B.to;
+    if (tc < 70) tc = 70;
+    if (th < WINK_HOLD_MIN_MS) th = WINK_HOLD_MIN_MS;
+    if (to < 160) to = 160;
+    this.addBlink(now, tc, th, to, 1, mask);
+  }
+
   /** Per-eye blink values (max over overlapping blinks); frees finished records. */
   evalBlinks(now) {
     const lag = this.styles[this.style].behavior.lagMs;
@@ -887,8 +953,11 @@ export class Director {
     if (now >= this.nextEventAt && now < this.watchEnd) {
       if (this.evType < 0) {
         const i = this.rng.pickWeighted(S.events.w, EV_COUNT);       // (1)
-        // Slaved: only the swarm's cues end Watch, so no Approach (it ends in Vanish). No draws skipped.
-        if (i >= 0 && !(i === EventType.Approach && this.slaved)) this.startEvent(i, now);
+        // A held look (§6.5.1) skips the events that move the gaze themselves. Slaved (a swarm's cues
+        // or a routine): only the cues end Watch, so no Approach (it ends in Vanish). No draws skipped.
+        const blocked = (this.lookOn && (i === EventType.LookAround || i === EventType.Sweep)) ||
+          (i === EventType.Approach && this.slaved);
+        if (i >= 0 && !blocked) this.startEvent(i, now);
         const ev = this.rng.uniform(3, 8);                            // (last)
         this.nextEventAt = now + 1000 * ev;
       } else {
@@ -1164,7 +1233,45 @@ export class Director {
     this.sacStart = now;
     this.sacDur = dur;
     this.saccading = true;
+    this.sacSmooth = false;
     this.microX = 0; this.microY = 0;
+  }
+
+  /**
+   * Directed gaze (§6.5.1): move to the held target, draw-free. lookTMs > 0 is a smooth glide of that
+   * length (smoothstep, no overshoot); 0 is a saccade at the main-sequence speed.
+   */
+  lookTo(now) {
+    const dur = this.lookTMs > 0 ? this.lookTMs : this.saccadeDurMs(this.lookTX, this.lookTY);
+    this.beginSaccadeMotion(this.lookTX, this.lookTY, dur, now);
+    this.sacSmooth = this.lookTMs > 0;
+    this.fixUntil = now + dur;
+  }
+
+  /** The directed-gaze state machine (§6.5.1); runs first in updateGaze. */
+  updateLook(now) {
+    if (this.lookInOn) {
+      const changed = !this.lookOn || this.lookInX !== this.lookTX || this.lookInY !== this.lookTY ||
+        this.lookInMs !== this.lookTMs;
+      if (changed) {
+        this.lookOn = true;
+        this.lookTX = this.lookInX;
+        this.lookTY = this.lookInY;
+        this.lookTMs = this.lookInMs;
+        if (this.evType === EventType.Sweep || this.evType === EventType.LookAround) this.endEvent();
+        if (this.ph !== Phase.Startle) this.lookTo(now);
+      } else if (!this.saccading && this.ph !== Phase.Startle &&
+                 len(this.curX - this.lookTX, this.curY - this.lookTY) > LOOK_EPS) {
+        // Something else moved the gaze (an Appear's start pose, a startle): back to the target.
+        const dur = this.saccadeDurMs(this.lookTX, this.lookTY);
+        this.beginSaccadeMotion(this.lookTX, this.lookTY, dur, now);
+        this.fixUntil = now + dur;
+      }
+      this.clearSacQ();                                                         // e.g. the Appear viewer saccade
+    } else if (this.lookOn) {
+      this.lookOn = false;
+      this.fixUntil = now;                                                      // random fixations resume
+    }
   }
 
   /** startSaccade(T [, durOverride]); durOverride <= 0 = not given. */
@@ -1189,6 +1296,9 @@ export class Director {
     const G = S.gaze;
     if (G.kind === GazeKind.None) return;
 
+    // Directed gaze (§6.5.1)
+    this.updateLook(now);
+
     // Queued saccades (Appear viewer saccade, LookAround)
     if (this.sacQLen > 0 && now >= this.sacQNextAt) {
       const e = this.sacQ[this.sacQHead];
@@ -1202,7 +1312,7 @@ export class Director {
     // Random fixations (Watch only; paused by queued saccades and Sweep)
     const maxBlink = this.blinkL > this.blinkR ? this.blinkL : this.blinkR;
     if (this.ph === Phase.Watch && !this.saccading && now >= this.fixUntil && maxBlink < 0.5 &&
-        this.sacQLen === 0 && this.evType !== EventType.Sweep) {
+        this.sacQLen === 0 && this.evType !== EventType.Sweep && !this.lookOn) {
       const vb = this.postStartleWatch ? 0.8 : G.viewerBias;
       const r = this.rng.next();                                                // (1)
       let tx, ty;
@@ -1232,7 +1342,8 @@ export class Director {
       const o = G.overshoot;
       const v = u - 1;
       let s;
-      if (o > 0) s = 1 + (o + 1) * v * v * v + o * v * v;
+      if (this.sacSmooth) s = u * u * (3 - 2 * u);                              // directed glide
+      else if (o > 0) s = 1 + (o + 1) * v * v * v + o * v * v;
       else s = 1 + v * v * v;                                                   // 1 - (1-u)^3
       this.curX = this.fromX + (this.toX - this.fromX) * s;
       this.curY = this.fromY + (this.toY - this.fromY) * s;

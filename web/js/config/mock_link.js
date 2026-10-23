@@ -3,6 +3,7 @@
 // like a real unit. DOM-free; usable from Node with injected styles.
 
 import { Director } from '../director.js';
+import { compileRoutine, RoutinePlayer } from '../routine.js';
 import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js';
 import { schemaHash } from './settings_schema.js';
 
@@ -12,7 +13,7 @@ const PHASES = ['Dark', 'Appear', 'Watch', 'Transition', 'Vanish', 'Startle'];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class MockLink {
-  /** opts: {schema, styles (normalized), profile, latencyMs, name} */
+  /** opts: {schema, styles (normalized), routines (shared/routines.json, optional), profile, latencyMs, name} */
   constructor(opts) {
     this.kind = 'demo';
     this.opts = opts;
@@ -24,6 +25,7 @@ export class MockLink {
     this.device = new DemoDevice({
       schema: opts.schema,
       styleIds: this.styles.map((s) => s.id),
+      routineIds: opts.routines ? opts.routines.routines.map((r) => r.id) : [],
       profile: opts.profile || 'poc',
       name: opts.name || 'HE-DEMO',
       schemaId: schemaHash(opts.schema),
@@ -32,6 +34,7 @@ export class MockLink {
     this.bootMs = Date.now();
     this.pending = {};
     this.pinned = -1;
+    this.player = null;     // RoutinePlayer while a routine plays (r<id>, docs/ROUTINES.md §R8)
     this.startShow();
   }
 
@@ -46,6 +49,7 @@ export class MockLink {
       return { ...s, weight: 0, id: s.id === 'hellfire' ? '' : s.id };   // main.cpp buildShowStyles()
     });
     this.simMs = 0;
+    this.player = null;     // main.cpp startShow(): a restart stops the routine
     this.director = new Director(table, (Math.random() * 0xffffffff) >>> 0, 0, v.spacing, 16.2);
     this.pinned = v.pin ? this.styles.findIndex((s) => s.id === v.pin) : -1;
     this.fs = null;
@@ -56,10 +60,14 @@ export class MockLink {
     this.simMs += TICK_MS;
     const p = this.pending;
     this.pending = {};
-    this.fs = this.director.update(this.simMs, {
+    const inputs = {
       pir: false, nextStyle: !!p.next, forceBlink: !!p.blink, forceStartle: !!p.startle, forceAppear: !!p.appear,
-      forceStyle: this.pinned,
-    });
+      forceStyle: this.pinned, forceWink: p.wink || 0,
+      lookOn: !!this.look, lookX: this.look ? this.look.x : 0, lookY: this.look ? this.look.y : 0,
+      lookMs: this.look ? this.look.ms : 0,
+    };
+    if (this.player && !this.player.inputs(this.simMs, inputs)) this.player = null;   // routine-owned inputs
+    this.fs = this.director.update(this.simMs, inputs);
   }
 
   onAction(a) {
@@ -67,6 +75,13 @@ export class MockLink {
     if (a.blink) this.pending.blink = true;
     if (a.startle) this.pending.startle = true;
     if (a.appear) this.pending.appear = true;
+    if (a.wink) this.pending.wink = a.wink;
+    if (a.look !== undefined) this.look = a.look;   // null = free
+    if (a.routine === null) this.player = null;
+    if (typeof a.routine === 'string') {
+      this.player = new RoutinePlayer(compileRoutine(this.opts.routines, a.routine, this.styles));
+      this.player.start(this.simMs);
+    }
     if (a.autoStyle) this.pinned = -1;
     if (Number.isInteger(a.style)) this.pinned = a.style;
     // The whole swarm (the demo swarm is this unit and two more that are not drawn): an action runs

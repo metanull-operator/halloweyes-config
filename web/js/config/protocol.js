@@ -21,6 +21,11 @@ export const UUID = Object.freeze({
 });
 
 export const MAX_LINE = 120;     // console::kMaxLine
+// console.cpp kLookNames (DESIGN.md §6.5.1; web/js/routine.js LOOK_TARGETS): name -> [x, y], screen sense.
+export const LOOK_NAMES = Object.freeze({
+  center: [0, 0], viewer: [0, Math.fround(0.35)], left: [-0.9, 0], right: [0.9, 0], up: [0, 0.9], down: [0, -0.9],
+  'up-left': [-0.64, 0.64], 'up-right': [0.64, 0.64], 'down-left': [-0.64, -0.64], 'down-right': [0.64, -0.64],
+});
 export const SWARM_MODE_NAMES = Object.freeze(['solo', 'hive', 'chorus', 'pack', 'scatter']);   // swarm::Mode order
 export const SWARM_MODE_LETTERS = 'OHCPS';                                                     // STATUS "sw" letter
 export const MAX_REPLY = 120;    // console::kMaxReply
@@ -61,12 +66,14 @@ export const PROFILES = Object.freeze({
 
 /**
  * The firmware's settings + command processor in JS.
- * opts: {schema, styleIds, profile (PROFILES key), name, actions(req), fw, schemaId}
+ * opts: {schema, styleIds, routineIds (shared/routines.json ids, firmware routines_gen.h order), profile
+ * (PROFILES key), name, actions(req), fw, schemaId}
  */
 export class DemoDevice {
   constructor(opts) {
     this.schema = opts.schema;
     this.styleIds = opts.styleIds;
+    this.routineIds = opts.routineIds || [];
     this.profile = PROFILES[opts.profile || 'poc'];
     this.caps = new Set(this.profile.caps);
     this.name = opts.name || 'HE-DEMO';
@@ -228,6 +235,38 @@ export class DemoDevice {
         return `ok wm ${name}`;
       }
       return 'err cmd';
+    }
+    if (l[0] === 'k') {   // console.cpp: kl / kr wink (DESIGN.md §6.5.1)
+      if ((l === 'kl' || l === 'kr')) {
+        this.actions({ wink: l === 'kl' ? 1 : 2 });
+        return `ok ${l}`;
+      }
+      return 'err cmd';
+    }
+    if (l[0] === 'g') {   // console.cpp: g = free, g<name>, g<x>,<y>[,<ms>] (DESIGN.md §6.5.1)
+      if (l === 'g') { this.actions({ look: null }); return 'ok g'; }
+      if (/^[a-z]/.test(l[1])) {
+        const t = LOOK_NAMES[l.slice(1)];
+        if (!Object.hasOwn(LOOK_NAMES, l.slice(1))) return 'err cmd';
+        this.actions({ look: { x: t[0], y: t[1], ms: 0 } });
+        return `ok g ${l.slice(1)}`;
+      }
+      const m = /^(-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)),(-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+))(?:,([0-9]{1,6}))?$/.exec(l.slice(1));
+      if (!m) return 'err range g';
+      const x = Number(m[1]);
+      const y = Number(m[2]);
+      const ms = m[3] === undefined ? 0 : Number(m[3]);
+      if (!(x >= -1 && x <= 1 && y >= -1 && y <= 1 && ms <= 10000)) return 'err range g';
+      this.actions({ look: { x, y, ms } });
+      return `ok g ${l.slice(1)}`;
+    }
+    if (l[0] === 'r') {   // console.cpp: r<id> = play a routine, r = stop, r? = list (serial only) (ROUTINES.md §R8)
+      if (l === 'r') { this.actions({ routine: null }); return 'ok r'; }
+      if (l === 'r?') return 'err cmd';
+      const id = l.slice(1);
+      if (!this.routineIds.includes(id)) return 'err range r';
+      this.actions({ routine: id });
+      return `ok r ${id}`;
     }
     if (l === 's') { this.actions({ autoStyle: true }); return 'ok s'; }
     if (l[0] === 's' && l[1] !== '?') {
