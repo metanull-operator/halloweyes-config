@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0d0f0c">
   <title>halloweyes config</title>
-  <link rel="stylesheet" href="css/config.css?v=372e0e069c">
+  <link rel="stylesheet" href="css/config.css?v=fdf99b96fa">
 </head>
 <body>
   <header class="bar">
@@ -66,11 +66,14 @@
           <h2 id="swarmCtlTitle">Every unit, together</h2>
           <div class="btn-grid">
             <button data-wcmd="wa" class="secondary">Appear now</button>
+            <button data-wcmd="wd" class="secondary">Disappear now</button>
+            <button data-wcmd="wfi" class="secondary">Fade in</button>
+            <button data-wcmd="wfo" class="secondary">Fade out</button>
             <button data-wcmd="wn" class="secondary">Next style</button>
             <button data-wcmd="wb" class="secondary">Blink</button>
             <button data-wcmd="wp" class="secondary">Startle</button>
           </div>
-          <p class="help">Every unit acts at the same moment, about half a second after you tap.</p>
+          <p class="help">Every unit acts at the same moment, about half a second after you tap. <i>Fade in</i> and <i>Fade out</i> open or close the units one after another over about 3 seconds. After a disappear or a fade out the show goes on as usual: the eyes come back after a normal dark pause.</p>
           <div class="field">
             <label for="swarmPinSel">Show only</label>
             <select id="swarmPinSel"><option value="">Shuffle (all enabled styles)</option></select>
@@ -102,6 +105,7 @@
           <div class="btn-grid">
             <button data-cmd="identify" class="secondary" id="identifyBtn" hidden>Identify <small>3 blinks</small></button>
             <button data-cmd="a" class="secondary">Appear now</button>
+            <button data-cmd="d" class="secondary">Disappear now</button>
             <button data-cmd="n" class="secondary">Next style</button>
             <button data-cmd="b" class="secondary">Blink</button>
             <button data-cmd="p" class="secondary">Startle</button>
@@ -188,6 +192,6 @@
 
   <div id="toast" class="toast" role="alert" hidden></div>
 
-  <script type="module" src="js/config/config_app.js?v=372e0e069c"></script>
+  <script type="module" src="js/config/config_app.js?v=fdf99b96fa"></script>
 </body>
 </html>

@@ -1,13 +1,13 @@
 // halloweyes config page (docs/BLE.md §B7): connects over Web Bluetooth (or to a demo unit),
 // shows live status, sends show commands, and edits the runtime settings of shared/settings.json.
 
-import { loadSchema, schemaHash, available, parseValue } from './settings_schema.js?v=372e0e069c';
-import { parseReply } from './protocol.js?v=372e0e069c';
-import { BleLink, bluetoothSupport } from './ble_link.js?v=372e0e069c';
-import { MockLink } from './mock_link.js?v=372e0e069c';
-import { loadStyles } from '../styles.js?v=372e0e069c';
-import { compileRoutine } from '../routine.js?v=372e0e069c';
-import { drawThumbnail, LivePreview } from './preview.js?v=372e0e069c';
+import { loadSchema, schemaHash, available, parseValue } from './settings_schema.js?v=fdf99b96fa';
+import { parseReply } from './protocol.js?v=fdf99b96fa';
+import { BleLink, bluetoothSupport } from './ble_link.js?v=fdf99b96fa';
+import { MockLink } from './mock_link.js?v=fdf99b96fa';
+import { loadStyles } from '../styles.js?v=fdf99b96fa';
+import { compileRoutine } from '../routine.js?v=fdf99b96fa';
+import { drawThumbnail, LivePreview } from './preview.js?v=fdf99b96fa';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_POLL_MS = 1500;
@@ -49,9 +49,9 @@ function buildSwarmCard() {
 // they live under Whole swarm there, and are disabled here with the reason.
 const UNIT_GATE = {
   hive: { cmds: ['a', 'n'], pin: true,
-    why: 'In Hive the units appear, change style and vanish together: Appear now, Next style and Show only are under Whole swarm. Startle here takes this unit out of step until the eyes next appear.' },
+    why: 'In Hive the units appear, change style and vanish together: Appear now, Next style and Show only are under Whole swarm. Startle here takes this unit out of step until the eyes next appear; Disappear now closes this unit until then.' },
   chorus: { cmds: ['a', 'n'], pin: true,
-    why: 'In Chorus the units appear, change style and vanish together: Appear now, Next style and Show only are under Whole swarm.' },
+    why: 'In Chorus the units appear, change style and vanish together: Appear now, Next style and Show only are under Whole swarm. Disappear now closes this unit until the eyes next appear.' },
   pack: { cmds: ['n'], pin: true,
     why: 'In Pack every unit shows the same style: Next style and Show only are under Whole swarm.' },
 };
@@ -589,10 +589,13 @@ async function runCmd(cmd) {
     if (r.ok && cmd === 'r') toast('Routine stopped: the normal show takes over');
     if (r.ok && /^r[a-z]/.test(cmd)) toast(`Playing ${$('routinePick').selectedOptions[0]?.textContent || cmd.slice(1)}`);
     if (r.ok && cmd === 'a') toast('If the eyes are closed, they open within a second');
+    if (r.ok && cmd === 'd') toast('If the eyes are open, they close now; they come back after a normal dark pause');
     if (r.ok && cmd === 'identify') toast('This unit blinks 3 times (as soon as its eyes are open)');
     const every = { wa: 'Closed eyes open on every unit', wn: 'Every unit moves to the next style',
-      wb: 'Every unit blinks', wp: 'Every unit startles' }[cmd];
+      wb: 'Every unit blinks', wp: 'Every unit startles', wd: 'Open eyes close on every unit' }[cmd];
     if (r.ok && every) toast(`${every}, in about half a second`);
+    if (r.ok && cmd === 'wfo') toast('The units close their eyes one after another over about 3 seconds');
+    if (r.ok && cmd === 'wfi') toast('The units open their eyes one after another over about 3 seconds');
     if (r.ok && cmd.startsWith('ws')) toast(cmd === 'ws' ? 'Every unit goes back to the shuffle' : `Every unit shows ${styleName(cmd.slice(2))}`);
   } catch (e) {
     toast(String(e.message || e), true);
@@ -769,7 +772,7 @@ function showSupport() {
 /** shared/routines.json for Play demo (docs/ROUTINES.md §R8); the page works without it. */
 async function loadRoutines() {
   try {
-    const r = await fetch('../shared/routines.json?v=372e0e069c');
+    const r = await fetch('../shared/routines.json?v=fdf99b96fa');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const doc = await r.json();
     return Array.isArray(doc.routines) && doc.routines.length ? doc : null;
@@ -793,7 +796,7 @@ async function main() {
   wire();
   showSupport();
   try {
-    [S.schema, S.styles] = await Promise.all([loadSchema(), loadStyles('../shared/styles.json?v=372e0e069c')]);
+    [S.schema, S.styles] = await Promise.all([loadSchema(), loadStyles('../shared/styles.json?v=fdf99b96fa')]);
   } catch (e) {
     $('btSupport').innerHTML = `Could not load the page data (${e.message || e}). Serve the repository root (<code>node tools/serve.mjs</code>) or the built folder (<code>build/config/</code>).`;
     $('btSupport').hidden = false;

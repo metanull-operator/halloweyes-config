@@ -4,7 +4,7 @@
 // through one promise queue. A command resolves with the next REPLY notification (the firmware
 // answers every BLE command with exactly one reply, in order).
 
-import { UUID } from './protocol.js?v=372e0e069c';
+import { UUID } from './protocol.js?v=fdf99b96fa';
 
 const REPLY_TIMEOUT_MS = 4000;
 

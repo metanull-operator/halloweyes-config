@@ -2,10 +2,10 @@
 // firmware's command processor in JS) and a running Director, so status, pins and restarts behave
 // like a real unit. DOM-free; usable from Node with injected styles.
 
-import { Director } from '../director.js?v=372e0e069c';
-import { compileRoutine, RoutinePlayer } from '../routine.js?v=372e0e069c';
-import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js?v=372e0e069c';
-import { schemaHash } from './settings_schema.js?v=372e0e069c';
+import { Director, CUE_NONE, CUE_VANISH } from '../director.js?v=fdf99b96fa';
+import { compileRoutine, RoutinePlayer } from '../routine.js?v=fdf99b96fa';
+import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js?v=fdf99b96fa';
+import { schemaHash } from './settings_schema.js?v=fdf99b96fa';
 
 const TICK_MS = 1000 / 24;
 const PHASES = ['Dark', 'Appear', 'Watch', 'Transition', 'Vanish', 'Startle'];
@@ -62,6 +62,7 @@ export class MockLink {
     this.pending = {};
     const inputs = {
       pir: false, nextStyle: !!p.next, forceBlink: !!p.blink, forceStartle: !!p.startle, forceAppear: !!p.appear,
+      cue: p.disappear ? CUE_VANISH : CUE_NONE,
       forceStyle: this.pinned, forceWink: p.wink || 0,
       lookOn: !!this.look, lookX: this.look ? this.look.x : 0, lookY: this.look ? this.look.y : 0,
       lookMs: this.look ? this.look.ms : 0,
@@ -75,6 +76,7 @@ export class MockLink {
     if (a.blink) this.pending.blink = true;
     if (a.startle) this.pending.startle = true;
     if (a.appear) this.pending.appear = true;
+    if (a.disappear) this.pending.disappear = true;
     if (a.wink) this.pending.wink = a.wink;
     if (a.look !== undefined) this.look = a.look;   // null = free
     if (a.routine === null) this.player = null;
@@ -86,8 +88,9 @@ export class MockLink {
     if (Number.isInteger(a.style)) this.pinned = a.style;
     // The whole swarm (the demo swarm is this unit and two more that are not drawn): an action runs
     // half a second later, as on a real swarm tick.
-    const act = { 1: 'blink', 2: 'startle', 3: 'appear', 4: 'next' }[a.swarmAction];
-    if (act) setTimeout(() => { this.pending[act] = true; }, 500);
+    // Fade out / Fade in: this unit's place among the three is the middle one (1.5 s into the 3 s spread).
+    const act = { 1: 'blink', 2: 'startle', 3: 'appear', 4: 'next', 5: 'disappear', 6: 'disappear', 7: 'appear' }[a.swarmAction];
+    if (act) setTimeout(() => { this.pending[act] = true; }, a.swarmAction >= 6 ? 2000 : 500);
     if (Number.isInteger(a.swarmPin)) this.pinned = a.swarmPin >= 0 ? a.swarmPin : -1;
     if (a.identify) [0, 700, 1400].forEach((ms) => setTimeout(() => { this.pending.blink = true; }, ms));
     // Following the swarm again takes its value (firmware swarm.cpp applyCfg).

@@ -8,7 +8,7 @@
 
 import {
   available, crossCheck, defaultValue, formatValue, parseValue,
-} from './settings_schema.js?v=372e0e069c';
+} from './settings_schema.js?v=fdf99b96fa';
 
 const BASE = '68616c6c-6f77-6579-6573-0000000000';
 export const UUID = Object.freeze({
@@ -202,7 +202,7 @@ export class DemoDevice {
       return 'ok defaults reboot';
     }
     if (l === 'reboot') { this.actions({ reboot: true }); return 'ok reboot'; }
-    const single = { n: 'next', b: 'blink', p: 'startle', a: 'appear', t: 'toggle', v: 'selftest', c: 'testCard' };
+    const single = { n: 'next', b: 'blink', p: 'startle', a: 'appear', d: 'disappear', t: 'toggle', v: 'selftest', c: 'testCard' };
     if (l.length === 1 && single[l] && (l !== 'c' || this.caps.has('card'))) {
       if (l === 't') this.mode = this.mode === 'Always' ? 'Auto' : 'Always';
       this.actions({ [single[l]]: true });
@@ -212,9 +212,13 @@ export class DemoDevice {
     if (l[0] === 'w') {   // console.cpp: swarm builds only (w alone is serial)
       if (!this.swarm) return 'err cmd';
       if (l.startsWith('wset ')) return this.swarmSet(l.slice(5));
-      const act = { b: 1, p: 2, a: 3, n: 4 }[l[1]];   // swarm::Action
+      const act = { b: 1, p: 2, a: 3, n: 4, d: 5 }[l[1]];   // swarm::Action (wd: disappear now)
       if (l.length === 2 && act) {
         this.actions({ swarmAction: act });
+        return `ok ${l}`;
+      }
+      if (l === 'wfo' || l === 'wfi') {   // fade out / fade in, unit by unit (swarm::Action 6, 7)
+        this.actions({ swarmAction: l === 'wfo' ? 6 : 7 });
         return `ok ${l}`;
       }
       if (l[1] === 's' && l[2] !== '?') {   // ws<idx>, ws<id>: pin every unit; ws: unpin
