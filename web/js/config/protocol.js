@@ -8,7 +8,7 @@
 
 import {
   available, crossCheck, defaultValue, formatValue, parseValue,
-} from './settings_schema.js';
+} from './settings_schema.js?v=372e0e069c';
 
 const BASE = '68616c6c-6f77-6579-6573-0000000000';
 export const UUID = Object.freeze({

@@ -37,8 +37,8 @@
 import {
   OutlineType, OUTLINE_TYPE_NAMES, FILL_MODE_NAMES, PUPIL_TYPE_NAMES, BLINK_KIND_NAMES,
   GAZE_KIND_NAMES, STARTLE_MODE_NAMES, EVENT_NAMES, EV_COUNT,
-} from './constants.js';
-import { hexToRgbf } from './color.js';
+} from './constants.js?v=372e0e069c';
+import { hexToRgbf } from './color.js?v=372e0e069c';
 
 const f32 = Math.fround;
 
@@ -389,7 +389,7 @@ export function styleIndexById(styles, id) {
 }
 
 /** Fetch and normalize the styles document (browser; default path relative to web/). */
-export async function loadStyles(url = '../shared/styles.json') {
+export async function loadStyles(url = '../shared/styles.json?v=372e0e069c') {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`loadStyles: ${url}: HTTP ${res.status}`);
   return normalizeStyles(await res.json());

@@ -9,7 +9,7 @@
 //     targets as numbers, Appear seeds filled in.
 //   new RoutinePlayer(program) -> start(nowMs), then inputs(nowMs, out) once per director tick.
 
-import { CUE_NONE, CUE_APPEAR, CUE_VANISH, CUE_RESET, HE_VIEW_Y, MASK_L, MASK_R } from './director.js';
+import { CUE_NONE, CUE_APPEAR, CUE_VANISH, CUE_RESET, HE_VIEW_Y, MASK_L, MASK_R } from './director.js?v=372e0e069c';
 
 export const ROUTINE_ACTIONS = Object.freeze(['appear', 'vanish', 'style', 'blink', 'wink', 'look', 'free', 'startle']);
 

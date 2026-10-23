@@ -1,13 +1,13 @@
 // halloweyes config page (docs/BLE.md §B7): connects over Web Bluetooth (or to a demo unit),
 // shows live status, sends show commands, and edits the runtime settings of shared/settings.json.
 
-import { loadSchema, schemaHash, available, parseValue } from './settings_schema.js';
-import { parseReply } from './protocol.js';
-import { BleLink, bluetoothSupport } from './ble_link.js';
-import { MockLink } from './mock_link.js';
-import { loadStyles } from '../styles.js';
-import { compileRoutine } from '../routine.js';
-import { drawThumbnail, LivePreview } from './preview.js';
+import { loadSchema, schemaHash, available, parseValue } from './settings_schema.js?v=372e0e069c';
+import { parseReply } from './protocol.js?v=372e0e069c';
+import { BleLink, bluetoothSupport } from './ble_link.js?v=372e0e069c';
+import { MockLink } from './mock_link.js?v=372e0e069c';
+import { loadStyles } from '../styles.js?v=372e0e069c';
+import { compileRoutine } from '../routine.js?v=372e0e069c';
+import { drawThumbnail, LivePreview } from './preview.js?v=372e0e069c';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_POLL_MS = 1500;
@@ -769,7 +769,7 @@ function showSupport() {
 /** shared/routines.json for Play demo (docs/ROUTINES.md §R8); the page works without it. */
 async function loadRoutines() {
   try {
-    const r = await fetch('../shared/routines.json');
+    const r = await fetch('../shared/routines.json?v=372e0e069c');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const doc = await r.json();
     return Array.isArray(doc.routines) && doc.routines.length ? doc : null;
@@ -793,7 +793,7 @@ async function main() {
   wire();
   showSupport();
   try {
-    [S.schema, S.styles] = await Promise.all([loadSchema(), loadStyles('../shared/styles.json')]);
+    [S.schema, S.styles] = await Promise.all([loadSchema(), loadStyles('../shared/styles.json?v=372e0e069c')]);
   } catch (e) {
     $('btSupport').innerHTML = `Could not load the page data (${e.message || e}). Serve the repository root (<code>node tools/serve.mjs</code>) or the built folder (<code>build/config/</code>).`;
     $('btSupport').hidden = false;

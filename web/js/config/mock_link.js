@@ -2,10 +2,10 @@
 // firmware's command processor in JS) and a running Director, so status, pins and restarts behave
 // like a real unit. DOM-free; usable from Node with injected styles.
 
-import { Director } from '../director.js';
-import { compileRoutine, RoutinePlayer } from '../routine.js';
-import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js';
-import { schemaHash } from './settings_schema.js';
+import { Director } from '../director.js?v=372e0e069c';
+import { compileRoutine, RoutinePlayer } from '../routine.js?v=372e0e069c';
+import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js?v=372e0e069c';
+import { schemaHash } from './settings_schema.js?v=372e0e069c';
 
 const TICK_MS = 1000 / 24;
 const PHASES = ['Dark', 'Appear', 'Watch', 'Transition', 'Vanish', 'Startle'];

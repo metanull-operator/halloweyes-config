@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0d0f0c">
   <title>halloweyes config</title>
-  <link rel="stylesheet" href="css/config.css">
+  <link rel="stylesheet" href="css/config.css?v=372e0e069c">
 </head>
 <body>
   <header class="bar">
@@ -113,7 +113,7 @@
             <select id="pinNow"><option value="">Shuffle (all enabled styles)</option></select>
             <p class="help" id="pinNowHelp">Pins a style until the next power cycle. To keep it after a reboot, use <i>Pinned at boot</i> under Styles.</p>
           </div>
-          <div class="field" id="routineField">
+          <div class="field" id="routineField" hidden>
             <label for="routinePick">Demo routine</label>
             <div class="row">
               <select id="routinePick"></select>
@@ -188,6 +188,6 @@
 
   <div id="toast" class="toast" role="alert" hidden></div>
 
-  <script type="module" src="js/config/config_app.js"></script>
+  <script type="module" src="js/config/config_app.js?v=372e0e069c"></script>
 </body>
 </html>
