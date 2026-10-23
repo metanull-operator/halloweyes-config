@@ -112,6 +112,21 @@ button.small { min-height: 34px; padding: 6px 10px; font-size: 0.88rem; }
 .btn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
 .btn-grid + .field { margin-top: 12px; }
 
+/* Views (swarm firmware): Whole swarm / This unit, each with one scope */
+.views {
+  position: sticky; top: calc(55px + env(safe-area-inset-top)); z-index: 9;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+}
+.views button { border: 0; min-height: 40px; background: transparent; font-weight: 600; color: var(--muted); }
+.views button[aria-selected=true] { background: var(--accent); color: var(--accent-ink); }
+.view { display: grid; gap: 14px; }
+.scope { margin: 0; padding: 9px 12px; border-radius: 10px; font-size: 0.9rem; border: 1px solid var(--line); background: var(--card-2); }
+.scope.all { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+.scope.all b { color: var(--accent); }
+.field.locked input[type=range], .field.locked .num, .field.locked input[type=text] { opacity: 0.5; }
+.lock-note { margin-top: 0; }
+
 /* Notices */
 .notice { border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; background: var(--card-2); border: 1px solid var(--line); font-size: 0.92rem; }
 .notice.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }

@@ -13,6 +13,9 @@
     { "key": "night", "type": "float", "min": 0.05, "max": 1.0, "decimals": 2, "step": 0.01,
       "default": { "macro": "HE_NIGHT_LEVEL", "value": 0.55 }, "apply": "live", "needs": [], "group": "display",
       "label": "Brightness", "help": "Night brightness level (0.55 = default). The LDR scales it down further on very dark nights." },
+    { "key": "nightSw", "type": "bool",
+      "default": { "value": true }, "apply": "live", "needs": ["swarm"], "group": "display",
+      "label": "Follow swarm brightness", "help": "On: this unit uses the brightness set for the whole swarm. Off: it keeps its own brightness." },
     { "key": "spacing", "type": "float", "min": 40, "max": 140, "decimals": 1, "step": 0.5, "unit": "mm",
       "default": { "macro": "HE_EYE_SPACING_MM", "value": 76 }, "apply": "restart", "needs": [], "group": "display",
       "label": "Eye spacing", "help": "Centre-to-centre distance of the two displays. Used for vergence and the scanner sweep." },
@@ -72,6 +75,9 @@
       "label": "Bluetooth window", "help": "Seconds the unit stays connectable after a boot (0 = always). Press RESET to reopen it." },
     { "key": "blePin", "type": "int", "min": 0, "max": 999999, "step": 1, "secret": true,
       "default": { "value": 0 }, "apply": "live", "needs": ["ble"], "group": "ble",
-      "label": "PIN", "help": "0 = no PIN. With a PIN, a phone must enter it before it can change anything." }
+      "label": "PIN", "help": "0 = no PIN. With a PIN, a phone must enter it before it can change anything." },
+    { "key": "pinSw", "type": "bool",
+      "default": { "value": true }, "apply": "live", "needs": ["ble", "swarm"], "group": "ble",
+      "label": "Follow swarm PIN", "help": "On: this unit uses the PIN set for the whole swarm. Off: it keeps its own PIN." }
   ]
 }

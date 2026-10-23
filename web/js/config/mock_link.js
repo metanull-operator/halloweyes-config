@@ -69,6 +69,16 @@ export class MockLink {
     if (a.appear) this.pending.appear = true;
     if (a.autoStyle) this.pinned = -1;
     if (Number.isInteger(a.style)) this.pinned = a.style;
+    // The whole swarm (the demo swarm is this unit and two more that are not drawn): an action runs
+    // half a second later, as on a real swarm tick.
+    const act = { 1: 'blink', 2: 'startle', 3: 'appear', 4: 'next' }[a.swarmAction];
+    if (act) setTimeout(() => { this.pending[act] = true; }, 500);
+    if (Number.isInteger(a.swarmPin)) this.pinned = a.swarmPin >= 0 ? a.swarmPin : -1;
+    if (a.identify) [0, 700, 1400].forEach((ms) => setTimeout(() => { this.pending.blink = true; }, ms));
+    // Following the swarm again takes its value (firmware swarm.cpp applyCfg).
+    const d = this.device;
+    if (a.setting === 'nightSw' && a.value && d.swarmCfg.night != null) d.values.night = d.swarmCfg.night;
+    if (a.setting === 'pinSw' && a.value && d.swarmCfg.blePin != null) d.values.blePin = d.swarmCfg.blePin;
     if (a.apply === 'restart') this.startShow();
     if (a.reboot) setTimeout(() => this.simulateReboot(), 300);
     if (a.disconnect) setTimeout(() => this.dropConnection(), 50);
@@ -115,12 +125,17 @@ export class MockLink {
     const fs = this.fs;
     const caps = d.caps;
     const st = fs ? this.styles[fs.style]?.id ?? '?' : '?';
+    const swarmCfg = d.swarm ? {   // main.cpp publishStatus: brightness x 100 and PIN set, -1 = never set
+      sb: d.swarmCfg.night == null ? -1 : Math.round(d.swarmCfg.night * 100),
+      sp: d.swarmCfg.blePin == null ? -1 : (d.swarmCfg.blePin ? 1 : 0),
+    } : {};
     return JSON.stringify({
       ph: fs ? PHASES[fs.phase] : 'Dark', st, pin: this.pinned >= 0 ? this.styles[this.pinned].id : '',
       mode: d.mode, pwr: 'Show', bri: Number(d.values.night.toFixed(2)), lmv: caps.has('ldr') ? 640 : 0,
       vb: caps.has('vbat') ? 3940 : 0, fps: 24.0, up: Math.floor((Date.now() - this.bootMs) / 1000),
       dirty: d.dirty.size ? 1 : 0, rb: d.rebootNeeded ? 1 : 0,
       sw: d.swarm ? `C3${SWARM_MODE_LETTERS[SWARM_MODE_NAMES.indexOf(d.swarmMode)]}` : '-',   // a demo swarm of 3, this unit leading
+      ...swarmCfg,
     });
   }
 

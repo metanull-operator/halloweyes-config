@@ -7,7 +7,7 @@
 
 export const TYPES = Object.freeze(['float', 'int', 'bool', 'mask', 'style', 'string']);
 export const APPLY = Object.freeze(['live', 'restart', 'reboot']);
-export const NEEDS = Object.freeze(['ldr', 'pir', 'vbat', 'ble', 'lcd']);   // lcd: GC9A01 panels
+export const NEEDS = Object.freeze(['ldr', 'pir', 'vbat', 'ble', 'lcd', 'swarm']);   // lcd: GC9A01 panels; swarm: HE_SWARM
 export const NAME_RE = /^[A-Za-z0-9_-]*$/;      // the only string pattern the firmware implements
 export const KEY_MAX = 15;                      // NVS key length limit
 export const STYLE_ID_MAX = 15;                 // char[16] in Settings

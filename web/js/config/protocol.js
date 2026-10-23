@@ -39,7 +39,7 @@ export function parseReply(line) {
     r.key = words[2] || null;
     return r;
   }
-  const kv = words[1] || '';
+  const kv = (words[1] === 'wset' ? words[2] : words[1]) || '';   // "ok wset night=0.40": a swarm setting
   const eq = kv.indexOf('=');
   if (eq > 0) {
     r.key = kv.slice(0, eq);
@@ -52,7 +52,7 @@ export function parseReply(line) {
 /** Build profiles: capabilities as the firmware reports them in INFO (ble_config.cpp buildInfo). */
 export const PROFILES = Object.freeze({
   poc: { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'] },
-  'poc-swarm': { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'boot', 'card'], swarm: true,
+  'poc-swarm': { build: 'poc', panel: 'gc9a01', caps: ['ble', 'lcd', 'swarm', 'boot', 'card'], swarm: true,
     defaults: { bleWin: 0 } },   // poc_swarm env (config.h: swarm builds are always connectable)
   oled: { build: 'oled', panel: 'ssd1351', caps: ['ble', 'boot', 'card'] },
   'full-battery': { build: 'full-battery', panel: 'gc9a01', caps: ['ldr', 'pir', 'vbat', 'ble', 'lcd', 'reed', 'card'] },
@@ -81,6 +81,7 @@ export class DemoDevice {
     this.mode = 'Auto';                 // "always" lives in the power module
     this.swarm = !!this.profile.swarm;  // swarm firmware (HE_SWARM): wm<mode>
     this.swarmMode = 'hive';
+    this.swarmCfg = { night: null, blePin: null };   // the swarm's settings as this unit knows them
     this.stored = {};                   // NVS image (keys that differ from the default)
     this.dirty = new Set();
     this.lastSetMs = 0;
@@ -200,8 +201,26 @@ export class DemoDevice {
       this.actions({ [single[l]]: true });
       return `ok ${l}`;
     }
-    if (l[0] === 'w') {   // console.cpp: swarm builds only; over BLE only wm<mode> (w alone is serial)
-      if (this.swarm && l[1] === 'm' && l.length > 2) {
+    if (l === 'identify') { this.actions({ identify: true }); return 'ok identify'; }
+    if (l[0] === 'w') {   // console.cpp: swarm builds only (w alone is serial)
+      if (!this.swarm) return 'err cmd';
+      if (l.startsWith('wset ')) return this.swarmSet(l.slice(5));
+      const act = { b: 1, p: 2, a: 3, n: 4 }[l[1]];   // swarm::Action
+      if (l.length === 2 && act) {
+        this.actions({ swarmAction: act });
+        return `ok ${l}`;
+      }
+      if (l[1] === 's' && l[2] !== '?') {   // ws<idx>, ws<id>: pin every unit; ws: unpin
+        if (l.length === 2) { this.actions({ swarmPin: -2 }); return 'ok ws'; }
+        const rest = l.slice(2);
+        const idx = /^[0-9]/.test(rest) ? Number.parseInt(rest, 10) : this.styleIds.indexOf(rest);
+        if (idx >= 0 && idx < this.styleIds.length) {
+          this.actions({ swarmPin: idx });
+          return `ok ws ${this.styleIds[idx]}`;
+        }
+        return 'err range ws';
+      }
+      if (l[1] === 'm' && l.length > 2) {
         const name = l.slice(2);
         if (!SWARM_MODE_NAMES.includes(name)) return 'err range wm';
         this.swarmMode = name;
@@ -221,6 +240,27 @@ export class DemoDevice {
       return 'err range s';
     }
     return 'err cmd';
+  }
+
+  /**
+   * console.cpp swarmSet(): "wset <key>=<value>", a swarm setting (night, blePin) for every unit.
+   * Checked as by set; applied here too while this unit follows the swarm's value.
+   */
+  swarmSet(arg) {
+    const eq = arg.indexOf('=');
+    const key = eq > 0 ? arg.slice(0, eq) : '';
+    if (!key || key.length >= 24) return 'err cmd';
+    const d = this.def(key);
+    if ((key !== 'night' && key !== 'blePin') || !d) return `err key ${key}`;
+    const text = arg.slice(eq + 1);
+    const p = parseValue(d, text, { styleIds: this.styleIds });
+    if (!p.ok) return `err ${p.err} ${key}`;
+    if (this.caps.has('ldr') && crossCheck({ ...this.values, [key]: p.value })) return `err range ${key}`;
+    this.swarmCfg[key] = p.value;
+    this.actions({ swarmCfg: key, value: p.value });
+    if (key === 'night' ? this.values.nightSw : this.values.pinSw) this.set(key, text);
+    const shown = d.secret ? (p.value ? 'set' : '0') : formatValue(d, p.value);
+    return `ok wset ${key}=${shown}`;
   }
 
   /** settings.cpp poll(): the debounced save, 3 s after the last change. */

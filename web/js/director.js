@@ -887,7 +887,8 @@ export class Director {
     if (now >= this.nextEventAt && now < this.watchEnd) {
       if (this.evType < 0) {
         const i = this.rng.pickWeighted(S.events.w, EV_COUNT);       // (1)
-        if (i >= 0) this.startEvent(i, now);
+        // Slaved: only the swarm's cues end Watch, so no Approach (it ends in Vanish). No draws skipped.
+        if (i >= 0 && !(i === EventType.Approach && this.slaved)) this.startEvent(i, now);
         const ev = this.rng.uniform(3, 8);                            // (last)
         this.nextEventAt = now + 1000 * ev;
       } else {

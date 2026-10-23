@@ -44,15 +44,89 @@ function buildSwarmCard() {
   }
 }
 
+// This unit's show controls that act on the whole swarm in a mode (main.cpp, swarm_driver.cpp):
+// they live under Whole swarm there, and are disabled here with the reason.
+const UNIT_GATE = {
+  hive: { cmds: ['a', 'n'], pin: true,
+    why: 'In Hive the units appear, change style and vanish together: Appear now, Next style and Show only are under Whole swarm. Startle here takes this unit out of step until the eyes next appear.' },
+  chorus: { cmds: ['a', 'n'], pin: true,
+    why: 'In Chorus the units appear, change style and vanish together: Appear now, Next style and Show only are under Whole swarm.' },
+  pack: { cmds: ['n'], pin: true,
+    why: 'In Pack every unit shows the same style: Next style and Show only are under Whole swarm.' },
+};
+
 function updateSwarm(st) {
   const sw = parseSwarm(st.sw);
-  $('swarmCard').hidden = !sw;
-  if (!sw) return;
-  buildSwarmCard();
+  if (!S.swarmUi || !sw) return;
   const role = { C: 'this unit leads', F: 'following', J: 'searching for others…' }[sw.role];
   $('swarmMeta').textContent = sw.role === 'J' ? role : `${sw.units} unit${sw.units === 1 ? '' : 's'} · ${role}`;
+  $('swarmSearching').hidden = sw.role !== 'J';
   for (const b of $('swarmModes').children) b.setAttribute('aria-pressed', String(!!sw.mode && b.dataset.mode === sw.mode.id));
   $('swarmHelp').textContent = sw.mode ? sw.mode.help : '';
+  // Whole swarm: one style for every unit only in the modes that share a style.
+  const own = sw.mode && (sw.mode.id === 'scatter' || sw.mode.id === 'solo');
+  $('swarmPinSel').disabled = !!own;
+  $('swarmPinSel').value = own ? '' : (st.pin || '');
+  $('swarmPinHelp').textContent = own
+    ? `In ${sw.mode.label} each unit picks its own styles. To show one style on every unit, switch to Hive, Chorus or Pack.`
+    : 'Every unit shows this style until the swarm powers down.';
+  // This unit: what is unit-only in this mode (a unit still searching runs its own show).
+  const gate = (sw.role !== 'J' && sw.mode && UNIT_GATE[sw.mode.id]) || { cmds: [], pin: false, why: '' };
+  for (const b of document.querySelectorAll('[data-cmd]')) b.disabled = gate.cmds.includes(b.dataset.cmd);
+  $('pinNow').disabled = gate.pin;
+  $('unitCtlHelp').textContent = gate.why;
+  $('unitCtlHelp').hidden = !gate.why;
+  // Swarm settings as this unit knows them (STATUS sb: brightness x 100, sp: PIN set; -1 = never set).
+  if (!S.inflight.get('w:night')) {
+    S.swarmVals.night = st.sb >= 0 ? (st.sb / 100).toFixed(2) : '';
+    S.swarmControls.get('night')?.show(S.swarmVals.night || S.values.night || '0.55');
+  }
+  S.swarmVals.blePin = st.sp === 1 ? 'set' : st.sp === 0 ? '0' : '';
+  S.swarmControls.get('blePin')?.show(S.swarmVals.blePin);
+}
+
+function buildSwarmView() {
+  buildSwarmCard();
+  const host = $('swarmFields');
+  host.replaceChildren();
+  S.swarmControls.clear();
+  const night = defOf('night');
+  const c = rangeControl({ ...night, label: 'Brightness', help: 'Night brightness of every unit.' },
+    { set: (k, t) => setSetting(k, t, { swarm: true }), current: () => S.swarmVals.night, idPrefix: 'sw' });
+  S.swarmControls.set('night', c);
+  host.append(c.field);
+  const pin = defOf('blePin');
+  if (pin && S.caps.has('ble')) {
+    const p = pinCodeControl({ ...pin, label: 'Bluetooth PIN',
+      help: 'One PIN for every unit (0 = none). It travels between the units over the swarm radio, which is not encrypted.' },
+    { set: (k, t) => setSetting(k, t, { swarm: true }), idPrefix: 'sw', states: { set: 'swarm PIN set', 0: 'no swarm PIN', '': 'not set yet' } });
+    S.swarmControls.set('blePin', p);
+    host.append(p.field);
+  }
+  const sel = $('swarmPinSel');
+  sel.replaceChildren(el('option', { value: '', text: 'Shuffle (all enabled styles)' }),
+    ...S.info.styles.map((id) => el('option', { value: id, text: styleName(id) })));
+}
+
+function setView(v) {
+  S.view = v;
+  $('viewSwarm').hidden = v !== 'swarm';
+  $('viewUnit').hidden = v !== 'unit';
+  $('tabSwarm').setAttribute('aria-selected', String(v === 'swarm'));
+  $('tabUnit').setAttribute('aria-selected', String(v === 'unit'));
+  $('tabSwarm').tabIndex = v === 'swarm' ? 0 : -1;
+  $('tabUnit').tabIndex = v === 'unit' ? 0 : -1;
+  try { localStorage.setItem('he.view', v); } catch { /* private mode: the view is not remembered */ }
+}
+
+// A unit that follows a swarm setting cannot set its own value: its control is locked, with why.
+function updateFollow() {
+  for (const [flag, key, what] of [['nightSw', 'night', 'brightness'], ['pinSw', 'blePin', 'PIN']]) {
+    const c = S.controls.get(key);
+    if (!c?.enable) continue;
+    const following = S.swarmUi && S.values[flag] === '1';
+    c.enable(!following, following ? `This unit uses the swarm's ${what}. Turn off Follow swarm ${what} to give it its own.` : '');
+  }
 }
 
 async function switchSwarm(md) {
@@ -81,6 +155,10 @@ const S = {
   pendingSet: new Map(), // key -> latest text to send after the in-flight one
   lostReason: '',
   authPromise: null,
+  swarmUi: false,          // swarm firmware: the Whole swarm / This unit views
+  view: 'unit',
+  swarmVals: { night: '', blePin: '' },   // the swarm's settings (STATUS sb, sp)
+  swarmControls: new Map(),
 };
 
 // ------------------------------------------------------------------ helpers
@@ -193,27 +271,45 @@ async function send(text, { quiet = false } = {}) {
   return r;
 }
 
-/** Coalescing setter: one set per key in flight; the latest value wins. */
-async function setSetting(key, text) {
-  if (S.inflight.get(key)) { S.pendingSet.set(key, text); return; }
-  S.inflight.set(key, true);
+/**
+ * Coalescing setter: one set per key in flight; the latest value wins. swarm: "wset", the value
+ * for every unit (this unit takes it too while it follows the swarm).
+ */
+async function setSetting(key, text, { swarm = false } = {}) {
+  const slot = swarm ? `w:${key}` : key;
+  const values = swarm ? S.swarmVals : S.values;
+  const controls = swarm ? S.swarmControls : S.controls;
+  if (S.inflight.get(slot)) { S.pendingSet.set(slot, text); return; }
+  S.inflight.set(slot, true);
   try {
-    const r = await send(`set ${key}=${text}`);
+    const r = await send(`${swarm ? 'wset' : 'set'} ${key}=${text}`);
     if (r.ok && r.key === key) {
-      S.values[key] = r.value;
+      values[key] = r.value;
       if (r.apply === 'reboot') showRebootBar(true);
       if (r.apply === 'restart') toast('Saved. The show restarts with the change.');
+      if (swarm && S.values[key === 'night' ? 'nightSw' : 'pinSw'] === '1') {   // this unit follows: it took it too
+        S.values[key] = r.value;
+        S.controls.get(key)?.show(r.value);
+      }
+      if (key === 'nightSw' || key === 'pinSw') {
+        const k = key === 'nightSw' ? 'night' : 'blePin';
+        if (r.value === '1' && S.swarmVals[k] && k === 'night') {   // following again: the swarm's value
+          S.values.night = S.swarmVals.night;
+          S.controls.get('night')?.show(S.values.night);
+        }
+        updateFollow();
+      }
     }
-    if (!S.pendingSet.has(key)) S.controls.get(key)?.show(S.values[key], !r.ok);
+    if (!S.pendingSet.has(slot)) controls.get(key)?.show(values[key], !r.ok);
   } catch (e) {
     toast(String(e.message || e), true);
   } finally {
-    S.inflight.delete(key);
-    if (S.pendingSet.has(key)) {
-      const next = S.pendingSet.get(key);
-      S.pendingSet.delete(key);
-      if (next !== S.values[key]) setSetting(key, next);
-      else S.controls.get(key)?.show(S.values[key]);
+    S.inflight.delete(slot);
+    if (S.pendingSet.has(slot)) {
+      const next = S.pendingSet.get(slot);
+      S.pendingSet.delete(slot);
+      if (next !== values[key]) setSetting(key, next, { swarm });
+      else controls.get(key)?.show(values[key]);
     }
   }
 }
@@ -240,15 +336,15 @@ function fieldShell(def, control, { inline = false } = {}) {
   return f;
 }
 
-function rangeControl(def) {
-  const id = `f-${def.key}`;
+function rangeControl(def, { set = setSetting, current = () => S.values[def.key], idPrefix = 'f' } = {}) {
+  const id = `${idPrefix}-${def.key}`;
   const range = el('input', { type: 'range', min: def.min, max: def.max, step: def.step ?? 1, 'aria-label': def.label });
   const num = el('input', { type: 'number', class: 'num', id, min: def.min, max: def.max, step: def.step ?? 1, inputmode: 'decimal' });
   const field = fieldShell(def, el('div', { class: 'range-row' }, range, num));
   let last = 0;
   let timer = 0;
   const text = (v) => (def.type === 'float' ? Number(v).toFixed(def.decimals) : String(Math.round(Number(v))));
-  const sendNow = (v) => { clearTimeout(timer); last = performance.now(); setSetting(def.key, text(v)); };
+  const sendNow = (v) => { clearTimeout(timer); last = performance.now(); set(def.key, text(v)); };
   range.addEventListener('input', () => {
     num.value = text(range.value);
     const wait = SLIDER_THROTTLE_MS - (performance.now() - last);
@@ -259,7 +355,7 @@ function rangeControl(def) {
   range.addEventListener('change', () => sendNow(range.value));
   num.addEventListener('change', () => {
     const p = parseValue(def, num.value);
-    if (!p.ok) { toast(ERR_TEXT[p.err], true); show(S.values[def.key]); return; }
+    if (!p.ok) { toast(ERR_TEXT[p.err], true); show(current()); return; }
     range.value = num.value;
     sendNow(num.value);
   });
@@ -268,7 +364,16 @@ function rangeControl(def) {
     num.value = v;
     field.classList.toggle('err', !!bad);
   }
-  return { field, show };
+  const note = el('p', { class: 'help lock-note', hidden: true });
+  field.append(note);
+  function enable(on, why = '') {
+    range.disabled = !on;
+    num.disabled = !on;
+    field.classList.toggle('locked', !on);
+    note.textContent = why;
+    note.hidden = !why;
+  }
+  return { field, show, enable };
 }
 
 function boolControl(def) {
@@ -304,8 +409,8 @@ function textControl(def) {
   return { field, show: (v, bad) => { input.value = v; field.classList.toggle('err', !!bad); } };
 }
 
-function pinCodeControl(def) {
-  const id = `f-${def.key}`;
+function pinCodeControl(def, { set = setSetting, idPrefix = 'f', states = { set: 'PIN set', 0: 'no PIN' } } = {}) {
+  const id = `${idPrefix}-${def.key}`;
   const state = el('span', { class: 'badge' });
   const input = el('input', { type: 'text', id, inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', placeholder: 'new PIN (0 = none)' });
   const btn = el('button', { class: 'secondary small', type: 'button', text: 'Set' });
@@ -315,10 +420,22 @@ function pinCodeControl(def) {
     el('p', { class: 'help', text: def.help }));
   btn.addEventListener('click', async () => {
     const v = input.value.trim() || '0';
-    await setSetting(def.key, v);
+    await set(def.key, v);
     input.value = '';
   });
-  return { field, show: (v) => { state.textContent = v === 'set' ? 'PIN set' : 'no PIN'; } };
+  const note = el('p', { class: 'help lock-note', hidden: true });
+  field.append(note);
+  return {
+    field,
+    show: (v) => { state.textContent = states[v === 'set' ? 'set' : v === '0' || v === 0 ? 0 : ''] ?? states[0]; },
+    enable: (on, why = '') => {
+      input.disabled = !on;
+      btn.disabled = !on;
+      field.classList.toggle('locked', !on);
+      note.textContent = why;
+      note.hidden = !why;
+    },
+  };
 }
 
 function makeControl(def) {
@@ -351,6 +468,7 @@ function buildGroups() {
     }
     host.append(card);
   }
+  updateFollow();
 }
 
 // ------------------------------------------------------------------ status
@@ -466,7 +584,12 @@ async function runCmd(cmd) {
   try {
     const r = await send(cmd);
     if (r.ok && cmd === 'c') toast('Test card on the unit for 30 seconds');
-    if (r.ok && cmd === 'a') toast('If the eyes are closed, they open within a second (in Hive and Chorus, on every unit)');
+    if (r.ok && cmd === 'a') toast('If the eyes are closed, they open within a second');
+    if (r.ok && cmd === 'identify') toast('This unit blinks 3 times (as soon as its eyes are open)');
+    const every = { wa: 'Closed eyes open on every unit', wn: 'Every unit moves to the next style',
+      wb: 'Every unit blinks', wp: 'Every unit startles' }[cmd];
+    if (r.ok && every) toast(`${every}, in about half a second`);
+    if (r.ok && cmd.startsWith('ws')) toast(cmd === 'ws' ? 'Every unit goes back to the shuffle' : `Every unit shows ${styleName(cmd.slice(2))}`);
   } catch (e) {
     toast(String(e.message || e), true);
   }
@@ -502,8 +625,26 @@ async function afterConnect() {
     warn.hidden = true;
   }
   $('cardBtn').hidden = !S.caps.has('card');
+  S.swarmUi = S.caps.has('swarm');
+  S.swarmVals = { night: '', blePin: '' };
+  $('viewSwitch').hidden = !S.swarmUi;
+  $('unitScope').hidden = !S.swarmUi;
+  $('unitScopeName').textContent = $('devName').textContent;
+  $('identifyBtn').hidden = !S.swarmUi;
+  $('pinNowHelp').textContent = S.swarmUi
+    ? 'Pins a style on this unit until the next power cycle. To keep it after a reboot, use Pinned at boot under Styles.'
+    : 'Pins a style until the next power cycle. To keep it after a reboot, use Pinned at boot under Styles.';
   buildGroups();
   buildStyles();
+  if (S.swarmUi) {
+    buildSwarmView();
+    let v = 'swarm';
+    try { v = localStorage.getItem('he.view') || 'swarm'; } catch { /* the default view */ }
+    setView(v === 'unit' ? 'unit' : 'swarm');
+  } else {
+    $('viewSwarm').hidden = true;
+    $('viewUnit').hidden = false;
+  }
   showScreen('connected');
   setPill(S.link.kind === 'demo' ? 'Demo unit' : S.link.name, 'on');
   await pollStatus(true);
@@ -570,6 +711,16 @@ function wire() {
   $('reconnectBtn').addEventListener('click', reconnect);
   $('homeBtn').addEventListener('click', () => { S.link = null; showScreen('welcome'); });
   for (const b of document.querySelectorAll('[data-cmd]')) b.addEventListener('click', () => runCmd(b.dataset.cmd));
+  for (const b of document.querySelectorAll('[data-wcmd]')) b.addEventListener('click', () => runCmd(b.dataset.wcmd));
+  $('swarmPinSel').addEventListener('change', (e) => runCmd(e.target.value ? `ws${e.target.value}` : 'ws'));
+  $('tabSwarm').addEventListener('click', () => setView('swarm'));
+  $('tabUnit').addEventListener('click', () => setView('unit'));
+  $('viewSwitch').addEventListener('keydown', (e) => {   // tabs: arrow keys move between them
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    setView(S.view === 'swarm' ? 'unit' : 'swarm');
+    $(S.view === 'swarm' ? 'tabSwarm' : 'tabUnit').focus();
+  });
   $('pinNow').addEventListener('change', (e) => runCmd(e.target.value ? `s${e.target.value}` : 's'));
   $('showNowBtn').addEventListener('click', () => runCmd(`s${S.info.styles[S.selected]}`));
   $('bootPin').addEventListener('change', async (e) => {

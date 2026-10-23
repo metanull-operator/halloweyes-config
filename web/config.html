@@ -43,71 +43,110 @@
 
     <!-- Connected -->
     <div id="connected" hidden>
-      <section class="card" id="statusCard" aria-labelledby="statusTitle">
-        <div class="card-head">
-          <h2 id="statusTitle"><span id="devName">Unit</span></h2>
-          <span id="devMeta" class="meta"></span>
-        </div>
-        <div class="tiles" id="tiles"></div>
-        <p id="schemaWarn" class="notice warn" hidden></p>
-      </section>
+      <!-- Swarm firmware: two views, each with one scope (docs/SWARM.md §S0, Phone control) -->
+      <div id="viewSwitch" class="views" role="tablist" aria-label="What the controls change" hidden>
+        <button type="button" role="tab" id="tabSwarm" aria-controls="viewSwarm" aria-selected="true">Whole swarm</button>
+        <button type="button" role="tab" id="tabUnit" aria-controls="viewUnit" aria-selected="false">This unit</button>
+      </div>
 
-      <section class="card" id="swarmCard" aria-labelledby="swarmTitle" hidden>
-        <div class="card-head">
-          <h2 id="swarmTitle">Swarm</h2>
-          <span id="swarmMeta" class="meta"></span>
-        </div>
-        <div class="seg seg-wrap" id="swarmModes" role="group" aria-label="Swarm mode"></div>
-        <p class="help" id="swarmHelp"></p>
-      </section>
+      <div id="viewSwarm" class="view" role="tabpanel" aria-labelledby="tabSwarm" hidden>
+        <p class="scope all"><b>Every unit.</b> Everything on this page changes every unit in the swarm.</p>
 
-      <section class="card" aria-labelledby="ctlTitle">
-        <h2 id="ctlTitle">Show controls</h2>
-        <div class="btn-grid">
-          <button data-cmd="a" class="secondary">Appear now</button>
-          <button data-cmd="n" class="secondary">Next style</button>
-          <button data-cmd="b" class="secondary">Blink</button>
-          <button data-cmd="p" class="secondary">Startle</button>
-          <button data-cmd="c" class="secondary" id="cardBtn">Test card <small>30 s</small></button>
-        </div>
-        <div class="field">
-          <label for="pinNow">Show only</label>
-          <select id="pinNow"><option value="">Shuffle (all enabled styles)</option></select>
-          <p class="help">Pins a style until the next power cycle. In a swarm in Hive, Chorus or Pack it pins every unit. To keep it after a reboot, use <i>Pinned at boot</i> under Styles.</p>
-        </div>
-      </section>
+        <section class="card" id="swarmCard" aria-labelledby="swarmTitle">
+          <div class="card-head">
+            <h2 id="swarmTitle">Swarm</h2>
+            <span id="swarmMeta" class="meta"></span>
+          </div>
+          <p id="swarmSearching" class="notice" hidden>This unit has not found the other units yet. What you do here reaches them once it does.</p>
+          <div class="seg seg-wrap" id="swarmModes" role="group" aria-label="Swarm mode"></div>
+          <p class="help" id="swarmHelp"></p>
+        </section>
 
-      <section class="card" aria-labelledby="stylesTitle">
-        <h2 id="stylesTitle">Styles</h2>
-        <div class="preview-wrap">
-          <canvas id="livePreview" aria-label="Animated preview of the selected style"></canvas>
-          <div class="preview-info">
-            <div class="preview-name" id="previewName"></div>
-            <div class="preview-actions">
-              <button id="showNowBtn" class="secondary small">Show on unit now</button>
-              <label class="switch small"><input type="checkbox" id="bootPin"><span></span>Pinned at boot</label>
+        <section class="card" aria-labelledby="swarmCtlTitle">
+          <h2 id="swarmCtlTitle">Every unit, together</h2>
+          <div class="btn-grid">
+            <button data-wcmd="wa" class="secondary">Appear now</button>
+            <button data-wcmd="wn" class="secondary">Next style</button>
+            <button data-wcmd="wb" class="secondary">Blink</button>
+            <button data-wcmd="wp" class="secondary">Startle</button>
+          </div>
+          <p class="help">Every unit acts at the same moment, about half a second after you tap.</p>
+          <div class="field">
+            <label for="swarmPinSel">Show only</label>
+            <select id="swarmPinSel"><option value="">Shuffle (all enabled styles)</option></select>
+            <p class="help" id="swarmPinHelp">Every unit shows this style until the swarm powers down.</p>
+          </div>
+        </section>
+
+        <section class="card" id="swarmSettings" aria-labelledby="swarmSetTitle">
+          <h2 id="swarmSetTitle">Swarm settings</h2>
+          <div id="swarmFields"></div>
+          <p class="help">A unit whose <i>Follow swarm</i> switch is off (under <i>This unit</i>) keeps its own value.</p>
+        </section>
+      </div>
+
+      <div id="viewUnit" class="view" role="tabpanel" aria-labelledby="tabUnit">
+        <p class="scope one" id="unitScope" hidden><b>This unit only.</b> Everything on this page changes only <span id="unitScopeName">this unit</span>.</p>
+
+        <section class="card" id="statusCard" aria-labelledby="statusTitle">
+          <div class="card-head">
+            <h2 id="statusTitle"><span id="devName">Unit</span></h2>
+            <span id="devMeta" class="meta"></span>
+          </div>
+          <div class="tiles" id="tiles"></div>
+          <p id="schemaWarn" class="notice warn" hidden></p>
+        </section>
+
+        <section class="card" aria-labelledby="ctlTitle">
+          <h2 id="ctlTitle">Show controls</h2>
+          <div class="btn-grid">
+            <button data-cmd="identify" class="secondary" id="identifyBtn" hidden>Identify <small>3 blinks</small></button>
+            <button data-cmd="a" class="secondary">Appear now</button>
+            <button data-cmd="n" class="secondary">Next style</button>
+            <button data-cmd="b" class="secondary">Blink</button>
+            <button data-cmd="p" class="secondary">Startle</button>
+            <button data-cmd="c" class="secondary" id="cardBtn">Test card <small>30 s</small></button>
+          </div>
+          <p class="help" id="unitCtlHelp" hidden></p>
+          <div class="field">
+            <label for="pinNow">Show only</label>
+            <select id="pinNow"><option value="">Shuffle (all enabled styles)</option></select>
+            <p class="help" id="pinNowHelp">Pins a style until the next power cycle. To keep it after a reboot, use <i>Pinned at boot</i> under Styles.</p>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="stylesTitle">
+          <h2 id="stylesTitle">Styles</h2>
+          <div class="preview-wrap">
+            <canvas id="livePreview" aria-label="Animated preview of the selected style"></canvas>
+            <div class="preview-info">
+              <div class="preview-name" id="previewName"></div>
+              <div class="preview-actions">
+                <button id="showNowBtn" class="secondary small">Show on unit now</button>
+                <label class="switch small"><input type="checkbox" id="bootPin"><span></span>Pinned at boot</label>
+              </div>
             </div>
           </div>
-        </div>
-        <p class="help">Tap a style to preview it. The checkbox puts it in the shuffle or takes it out.</p>
-        <div class="style-grid" id="styleGrid"></div>
-      </section>
+          <p class="help">Tap a style to preview it. The checkbox puts it in the shuffle or takes it out.</p>
+          <div class="style-grid" id="styleGrid"></div>
+        </section>
 
-      <div id="groups"></div>
+        <div id="groups"></div>
 
-      <section class="card" aria-labelledby="maintTitle">
-        <h2 id="maintTitle">Maintenance</h2>
-        <div class="btn-grid">
-          <button id="saveBtn" class="secondary">Save now</button>
-          <button id="rebootBtn" class="secondary">Reboot</button>
-          <button id="defaultsBtn" class="danger">Factory defaults</button>
-        </div>
-        <p class="help">Changes are saved on the unit automatically a few seconds after you make them.</p>
-        <details class="log">
-          <summary>Activity</summary>
-          <ol id="log"></ol>
-        </details>
-      </section>
+        <section class="card" aria-labelledby="maintTitle">
+          <h2 id="maintTitle">Maintenance</h2>
+          <div class="btn-grid">
+            <button id="saveBtn" class="secondary">Save now</button>
+            <button id="rebootBtn" class="secondary">Reboot</button>
+            <button id="defaultsBtn" class="danger">Factory defaults</button>
+          </div>
+          <p class="help">Changes are saved on the unit automatically a few seconds after you make them.</p>
+          <details class="log">
+            <summary>Activity</summary>
+            <ol id="log"></ol>
+          </details>
+        </section>
+      </div>
     </div>
 
     <!-- Disconnected after being connected -->
