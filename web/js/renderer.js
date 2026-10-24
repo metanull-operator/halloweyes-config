@@ -16,11 +16,11 @@
 //
 // DOM-free ES module (§7.1): importable from the browser and from Node tools.
 
-import { OutlineType, FillMode, PupilType, BlinkKind, GazeKind, PANEL_PX, R_DISP_MM } from './constants.js?v=fdf99b96fa';
-import { clamp, lerp, len, fract, floorToInt, lerpRGB, mulRGB, grad3, aNorm } from './mathutil.js?v=fdf99b96fa';
-import { hash01, hkey, vnoise, vnoiseP } from './noise.js?v=fdf99b96fa';
-import { quantize565, outTransferLut } from './color.js?v=fdf99b96fa';
-import { outlineRb, outlineExtents } from './styles.js?v=fdf99b96fa';
+import { OutlineType, FillMode, PupilType, BlinkKind, GazeKind, PANEL_PX, R_DISP_MM } from './constants.js?v=f2f2c73996';
+import { clamp, lerp, len, fract, floorToInt, lerpRGB, mulRGB, grad3, aNorm } from './mathutil.js?v=f2f2c73996';
+import { hash01, hkey, vnoise, vnoiseP } from './noise.js?v=f2f2c73996';
+import { quantize565, outTransferLut } from './color.js?v=f2f2c73996';
+import { outlineRb, outlineExtents } from './styles.js?v=f2f2c73996';
 
 // Panel geometry comes from RenderConfig {spacingMm, panelPx, rDispMm} (docs/OLED.md §O4;
 // defaults PANEL_PX / R_DISP_MM). prepareEye stores it in EyeUniforms: halfPx = panelPx/2 (panel

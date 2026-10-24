@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0d0f0c">
   <title>halloweyes config</title>
-  <link rel="stylesheet" href="css/config.css?v=fdf99b96fa">
+  <link rel="stylesheet" href="css/config.css?v=f2f2c73996">
 </head>
 <body>
   <header class="bar">
@@ -81,6 +81,44 @@
           </div>
         </section>
 
+        <section class="card" id="visitCard" aria-labelledby="visitTitle">
+          <h2 id="visitTitle">Visitors</h2>
+          <p class="help">No motion sensor yet? Pretend someone is there. The units react the way they would to a real sensor: the first visitor gets the big scare, a busy evening gets calmer, and now and then the yard goes quiet for a minute or two.</p>
+          <div class="btn-grid">
+            <button data-wcmd="wvl" class="secondary">Walk by, left to right</button>
+            <button data-wcmd="wvr" class="secondary">Walk by, right to left</button>
+          </div>
+          <div class="field">
+            <label for="visitAuto">Random visitors</label>
+            <select id="visitAuto">
+              <option value="0">Off</option>
+              <option value="1">About one a minute</option>
+              <option value="3">About one every 3 minutes</option>
+              <option value="5">About one every 5 minutes</option>
+            </select>
+            <p class="help">Until the swarm powers down. Half walk past, half stop at one bush for a while.</p>
+          </div>
+          <div class="activity" id="activity" aria-live="polite">
+            <div><span class="k">Mood</span> <span id="actTier">–</span></div>
+            <div><span class="k">Last motion</span> <span id="actLast">–</span></div>
+          </div>
+        </section>
+
+        <section class="card" id="lineupCard" aria-labelledby="lineupTitle">
+          <h2 id="lineupTitle">Line up</h2>
+          <p class="help">Tell the units where they stand, so reactions run along the hedge and the eyes turn toward the right bush. Each unit shows a different creature: tap them here from <b>left to right as a visitor sees them</b>.</p>
+          <div class="row">
+            <button id="lineupStart" class="secondary">Start line-up</button>
+            <button id="lineupCancel" class="ghost" hidden>Cancel</button>
+          </div>
+          <p class="help" id="lineupState"></p>
+          <div class="style-grid lineup-grid" id="lineupPick" hidden></div>
+          <div class="row" id="lineupActions" hidden>
+            <button id="lineupUndo" class="ghost">Undo</button>
+            <button id="lineupSave" class="secondary">Save order</button>
+          </div>
+        </section>
+
         <section class="card" id="swarmSettings" aria-labelledby="swarmSetTitle">
           <h2 id="swarmSetTitle">Swarm settings</h2>
           <div id="swarmFields"></div>
@@ -106,6 +144,7 @@
             <button data-cmd="identify" class="secondary" id="identifyBtn" hidden>Identify <small>3 blinks</small></button>
             <button data-cmd="a" class="secondary">Appear now</button>
             <button data-cmd="d" class="secondary">Disappear now</button>
+            <button data-cmd="m" class="secondary">Motion here</button>
             <button data-cmd="n" class="secondary">Next style</button>
             <button data-cmd="b" class="secondary">Blink</button>
             <button data-cmd="p" class="secondary">Startle</button>
@@ -192,6 +231,6 @@
 
   <div id="toast" class="toast" role="alert" hidden></div>
 
-  <script type="module" src="js/config/config_app.js?v=fdf99b96fa"></script>
+  <script type="module" src="js/config/config_app.js?v=f2f2c73996"></script>
 </body>
 </html>

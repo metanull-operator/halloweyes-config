@@ -23,10 +23,10 @@
 //   - Directed gaze (lookOn/lookX/lookY/lookMs, §6.5.1) is draw-free and replaces the random
 //     fixations, queued saccades and the gaze-moving events (LookAround, Sweep) while it is held.
 
-import { Phase, BlinkKind, GazeKind, StartleMode, EventType, EV_COUNT, R_DISP_MM } from './constants.js?v=fdf99b96fa';
-import { clamp, lerp, smoothstep, len } from './mathutil.js?v=fdf99b96fa';
-import { vnoiseP } from './noise.js?v=fdf99b96fa';
-import { Rng } from './rng.js?v=fdf99b96fa';
+import { Phase, BlinkKind, GazeKind, StartleMode, EventType, EV_COUNT, R_DISP_MM } from './constants.js?v=f2f2c73996';
+import { clamp, lerp, smoothstep, len } from './mathutil.js?v=f2f2c73996';
+import { vnoiseP } from './noise.js?v=f2f2c73996';
+import { Rng } from './rng.js?v=f2f2c73996';
 
 export const HE_VIEW_Y = 0.35;              // normalized gaze Y meaning "looking at the viewer"
 export const MASK_L = 1;

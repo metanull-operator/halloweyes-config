@@ -2,7 +2,7 @@
 // firmware/src/noise.h; all integer math is 32-bit wrapping (Math.imul, |0, >>>).
 // DOM-free ES module.
 
-import { floorToInt } from './mathutil.js?v=fdf99b96fa';
+import { floorToInt } from './mathutil.js?v=f2f2c73996';
 
 /** Hash an int32 to [0, 1] (16-bit resolution). */
 export function hash01(i) {

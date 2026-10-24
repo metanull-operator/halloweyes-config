@@ -1,13 +1,14 @@
 // halloweyes config page (docs/BLE.md §B7): connects over Web Bluetooth (or to a demo unit),
 // shows live status, sends show commands, and edits the runtime settings of shared/settings.json.
 
-import { loadSchema, schemaHash, available, parseValue } from './settings_schema.js?v=fdf99b96fa';
-import { parseReply } from './protocol.js?v=fdf99b96fa';
-import { BleLink, bluetoothSupport } from './ble_link.js?v=fdf99b96fa';
-import { MockLink } from './mock_link.js?v=fdf99b96fa';
-import { loadStyles } from '../styles.js?v=fdf99b96fa';
-import { compileRoutine } from '../routine.js?v=fdf99b96fa';
-import { drawThumbnail, LivePreview } from './preview.js?v=fdf99b96fa';
+import { loadSchema, schemaHash, available, parseValue } from './settings_schema.js?v=f2f2c73996';
+import { parseReply } from './protocol.js?v=f2f2c73996';
+import { BleLink, bluetoothSupport } from './ble_link.js?v=f2f2c73996';
+import { MockLink } from './mock_link.js?v=f2f2c73996';
+import { loadStyles } from '../styles.js?v=f2f2c73996';
+import { compileRoutine } from '../routine.js?v=f2f2c73996';
+import { LINEUP_PALETTE, parseActivity } from './protocol.js?v=f2f2c73996';
+import { drawThumbnail, LivePreview } from './preview.js?v=f2f2c73996';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_POLL_MS = 1500;
@@ -154,6 +155,8 @@ const S = {
   selected: 0,           // index into info.styles
   rebootWanted: false,
   inflight: new Map(),   // key -> true while a set is on the way
+  activity: null,        // the last `wact` read-out (parseActivity)
+  lineup: { round: 0, picked: [], saving: false },
   pendingSet: new Map(), // key -> latest text to send after the in-flight one
   lostReason: '',
   authPromise: null,
@@ -495,6 +498,121 @@ function buildTiles(st) {
   $('tiles').replaceChildren(...tiles.map(([k, v]) => el('div', { class: 'tile' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: String(v) }))));
 }
 
+// ------------------------------------------------------------------ visitors, activity, line-up (SCENES.md §SC9, §SC10.3)
+
+const OUTCOME_TEXT = {
+  none: 'none yet', big: 'everyone startled', look: 'the others looked toward it', blink: 'a nervous blink ran down the line',
+  muted: 'ignored: that sensor keeps firing', repeat: 'the same visitor, still there', coalesced: 'the same visitor, seen by another unit',
+  lull: 'ignored: a quiet spell', calm: 'ignored: the swarm is calm (lots of visitors)', cooldown: 'too soon after the last reaction',
+  off: 'no reactions in this mode',
+};
+const TIER_TEXT = { fresh: 'Fresh: the next visitor gets a big scare', wary: 'Wary: small reactions only', calm: 'Calm: resting after a busy spell' };
+
+async function pollActivity() {
+  if (!S.link || !S.swarmUi || S.view !== 'swarm' || document.hidden) return;
+  try {
+    const r = await send('wact', { quiet: true });
+    const a = r.ok ? parseActivity(r.words.slice(1)) : null;
+    if (!a) return;
+    S.activity = a;
+    const scares = a.tier === 'fresh' ? ` · ${a.tokens} big scare${a.tokens === 1 ? '' : 's'} left` : '';
+    const lull = a.lullS > 0 ? ` · quiet spell, ${a.lullS} s left${a.hold === 'keeper' ? ' (this unit keeps watch)' : ''}` : '';
+    $('actTier').textContent = `${TIER_TEXT[a.tier] || a.tier}${scares}${lull}`;
+    $('actLast').textContent = a.agoS === null ? 'none yet'
+      : `${a.agoS} s ago${a.from !== null ? ` at bush ${a.from}` : ''}: ${OUTCOME_TEXT[a.outcome] || a.outcome}`;
+    if (a.visitors !== null && document.activeElement !== $('visitAuto')) {
+      const v = String(a.visitors);
+      if ([...$('visitAuto').options].some((o) => o.value === v)) $('visitAuto').value = v;
+    }
+    if (a.lineup > 0 && !S.lineup.round) showLineup(a.lineup, a.units);   // a line-up started elsewhere
+    if (a.lineup === 0 && S.lineup.round && !S.lineup.saving) closeLineup('The line-up ended.');
+  } catch { /* the next poll retries */ }
+}
+
+async function startLineup(round) {
+  const units = S.activity ? S.activity.units : (parseSwarm(S.status && S.status.sw) || { units: 1 }).units;
+  const r = await send(round === 1 ? 'wline' : 'wline +');
+  if (r.ok) showLineup(round, units);
+}
+
+function showLineup(round, units) {
+  const count = Math.max(0, Math.min(16, units - (round - 1) * 16));
+  S.lineup = { round, units, count, picked: [], saving: false };
+  $('lineupStart').hidden = true;
+  $('lineupCancel').hidden = false;
+  $('lineupPick').hidden = false;
+  $('lineupActions').hidden = false;
+  $('lineupState').textContent = `${count} unit${count === 1 ? '' : 's'} ${round === 2 ? '(the next 16) ' : ''}now show these creatures, ` +
+    'looking straight out. Tap them in order, left to right. Not sure which is which? Identify (under This unit) makes a unit blink.';
+  const grid = $('lineupPick');
+  grid.replaceChildren();
+  const thumbs = [];
+  for (let p = 0; p < count; p++) {
+    const id = LINEUP_PALETTE[p];
+    const canvas = el('canvas', { 'aria-hidden': 'true' });
+    const tile = el('button', { class: 'style-tile', type: 'button', 'data-p': String(p) },
+      canvas, el('span', { class: 'nm', text: styleName(id) }));
+    tile.addEventListener('click', () => {
+      if (S.lineup.picked.includes(p)) return;
+      S.lineup.picked.push(p);
+      drawLineup();
+    });
+    grid.append(tile);
+    const li = localIndex(id);
+    if (li >= 0) thumbs.push([canvas, li]);
+  }
+  const step = () => {
+    const t = thumbs.shift();
+    if (!t) return;
+    drawThumbnail(t[0], S.styles, t[1], S.info.panel);
+    setTimeout(step, 0);
+  };
+  setTimeout(step, 30);
+  drawLineup();
+}
+
+function drawLineup() {
+  for (const tile of $('lineupPick').children) {
+    const p = Number(tile.dataset.p);
+    const k = S.lineup.picked.indexOf(p);
+    tile.classList.toggle('picked', k >= 0);
+    tile.querySelector('.badge')?.remove();
+    if (k >= 0) tile.prepend(el('span', { class: 'badge', text: String((S.lineup.round - 1) * 16 + k + 1) }));
+  }
+  $('lineupUndo').disabled = S.lineup.picked.length === 0;
+  $('lineupSave').disabled = S.lineup.picked.length === 0;
+}
+
+async function saveLineup() {
+  const L = S.lineup;
+  if (!L.picked.length) return;
+  L.saving = true;
+  const r = await send(`wline ${L.picked.join(',')}`);
+  if (!r.ok) { L.saving = false; return; }
+  toast(`Saved: ${L.picked.length} unit${L.picked.length === 1 ? '' : 's'} in order`);
+  if (L.round === 1 && L.units > 16) {
+    await startLineup(2);
+  } else {
+    await send('wline -');
+    closeLineup('Saved. Reactions now run along the line, and the eyes turn toward the right bush.');
+  }
+}
+
+async function endLineup() {
+  S.lineup.saving = true;
+  await send('wline -');
+  closeLineup('Line-up cancelled: the units keep their old order.');
+}
+
+function closeLineup(msg) {
+  S.lineup = { round: 0, picked: [], saving: false };
+  $('lineupStart').hidden = false;
+  $('lineupCancel').hidden = true;
+  $('lineupPick').hidden = true;
+  $('lineupActions').hidden = true;
+  $('lineupState').textContent = msg || '';
+}
+
 async function pollStatus(force = false) {
   if (!S.link || (document.hidden && !force)) return;
   try {
@@ -594,6 +712,9 @@ async function runCmd(cmd) {
     const every = { wa: 'Closed eyes open on every unit', wn: 'Every unit moves to the next style',
       wb: 'Every unit blinks', wp: 'Every unit startles', wd: 'Open eyes close on every unit' }[cmd];
     if (r.ok && every) toast(`${every}, in about half a second`);
+    if (r.ok && cmd === 'm') toast('Motion at this unit: it startles if it may, and the swarm decides how the others react');
+    if (r.ok && (cmd === 'wvl' || cmd === 'wvr')) toast(`A visitor walks past, ${cmd === 'wvl' ? 'left to right' : 'right to left'}`);
+    if (r.ok && cmd.startsWith('wvauto')) toast(cmd === 'wvauto 0' ? 'No more random visitors' : 'Random visitors on');
     if (r.ok && cmd === 'wfo') toast('The units close their eyes one after another over about 3 seconds');
     if (r.ok && cmd === 'wfi') toast('The units open their eyes one after another over about 3 seconds');
     if (r.ok && cmd.startsWith('ws')) toast(cmd === 'ws' ? 'Every unit goes back to the shuffle' : `Every unit shows ${styleName(cmd.slice(2))}`);
@@ -657,11 +778,17 @@ async function afterConnect() {
   await pollStatus(true);
   clearInterval(S.pollTimer);
   S.pollTimer = setInterval(pollStatus, STATUS_POLL_MS);
+  clearInterval(S.actTimer);
+  S.actTimer = S.swarmUi ? setInterval(pollActivity, 2000) : 0;   // the Visitors card's read-out
+  closeLineup('');
+  pollActivity();
 }
 
 function onLost() {
   clearInterval(S.pollTimer);
   S.pollTimer = 0;
+  clearInterval(S.actTimer);
+  S.actTimer = 0;
   if (S.preview) S.preview.stop();
   setPill('Not connected', 'off');
   $('rebootBar').hidden = true;
@@ -720,6 +847,11 @@ function wire() {
   for (const b of document.querySelectorAll('[data-cmd]')) b.addEventListener('click', () => runCmd(b.dataset.cmd));
   for (const b of document.querySelectorAll('[data-wcmd]')) b.addEventListener('click', () => runCmd(b.dataset.wcmd));
   $('swarmPinSel').addEventListener('change', (e) => runCmd(e.target.value ? `ws${e.target.value}` : 'ws'));
+  $('visitAuto').addEventListener('change', (e) => runCmd(`wvauto ${e.target.value}`));
+  $('lineupStart').addEventListener('click', () => startLineup(1));
+  $('lineupCancel').addEventListener('click', () => endLineup());
+  $('lineupUndo').addEventListener('click', () => { S.lineup.picked.pop(); drawLineup(); });
+  $('lineupSave').addEventListener('click', () => saveLineup());
   $('tabSwarm').addEventListener('click', () => setView('swarm'));
   $('tabUnit').addEventListener('click', () => setView('unit'));
   $('viewSwitch').addEventListener('keydown', (e) => {   // tabs: arrow keys move between them
@@ -772,7 +904,7 @@ function showSupport() {
 /** shared/routines.json for Play demo (docs/ROUTINES.md §R8); the page works without it. */
 async function loadRoutines() {
   try {
-    const r = await fetch('../shared/routines.json?v=fdf99b96fa');
+    const r = await fetch('../shared/routines.json?v=f2f2c73996');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const doc = await r.json();
     return Array.isArray(doc.routines) && doc.routines.length ? doc : null;
@@ -796,7 +928,7 @@ async function main() {
   wire();
   showSupport();
   try {
-    [S.schema, S.styles] = await Promise.all([loadSchema(), loadStyles('../shared/styles.json?v=fdf99b96fa')]);
+    [S.schema, S.styles] = await Promise.all([loadSchema(), loadStyles('../shared/styles.json?v=f2f2c73996')]);
   } catch (e) {
     $('btSupport').innerHTML = `Could not load the page data (${e.message || e}). Serve the repository root (<code>node tools/serve.mjs</code>) or the built folder (<code>build/config/</code>).`;
     $('btSupport').hidden = false;

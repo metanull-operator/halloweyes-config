@@ -56,7 +56,7 @@ export function normalizeSchema(doc) {
     settings: Object.freeze(settings), byKey });
 }
 
-export async function loadSchema(url = new URL('../../../shared/settings.json?v=fdf99b96fa', import.meta.url)) {
+export async function loadSchema(url = new URL('../../../shared/settings.json?v=f2f2c73996', import.meta.url)) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`settings.json: HTTP ${r.status}`);
   return normalizeSchema(await r.json());

@@ -8,7 +8,7 @@
 
 import {
   available, crossCheck, defaultValue, formatValue, parseValue,
-} from './settings_schema.js?v=fdf99b96fa';
+} from './settings_schema.js?v=f2f2c73996';
 
 const BASE = '68616c6c-6f77-6579-6573-0000000000';
 export const UUID = Object.freeze({
@@ -21,6 +21,34 @@ export const UUID = Object.freeze({
 });
 
 export const MAX_LINE = 120;     // console::kMaxLine
+// swarm_node.cpp kLineupPalette (docs/SCENES.md §SC10.3): the creature a unit shows in a line-up, by place.
+export const LINEUP_PALETTE = Object.freeze(['jack', 'owl', 'cat', 'hypno', 'robot', 'ghost', 'spider', 'witch',
+  'alien', 'dragon', 'goat', 'zombie', 'wolf', 'stalker', 'hellfire', 'shadow']);
+
+/** console.cpp parseLineup(): "3,0,7" -> [3, 0, 7]; null if bad (1-16 indices 0-15, no repeats). */
+export function parseLineup(text) {
+  const parts = String(text).split(',');
+  if (parts.length < 1 || parts.length > 16) return null;
+  const out = [];
+  for (const p of parts) {
+    if (!/^[0-9]{1,3}$/.test(p)) return null;
+    const v = Number(p);
+    if (v > 15 || out.includes(v)) return null;
+    out.push(v);
+  }
+  return out;
+}
+
+/** `wact` reply words -> {tier, tokens, lullS, hold, outcome, agoS, from, visitors, order, lineup, units}. */
+export function parseActivity(words) {
+  if (!words || words.length < 11) return null;
+  const num = (w) => (w === '-' ? null : Number(w));
+  return {
+    tier: words[0], tokens: Number(words[1]), lullS: Number(words[2]), hold: words[3], outcome: words[4],
+    agoS: num(words[5]), from: num(words[6]), visitors: num(words[7]), order: num(words[8]),
+    lineup: Number(words[9]), units: Number(words[10]),
+  };
+}
 // console.cpp kLookNames (DESIGN.md §6.5.1; web/js/routine.js LOOK_TARGETS): name -> [x, y], screen sense.
 export const LOOK_NAMES = Object.freeze({
   center: [0, 0], viewer: [0, Math.fround(0.35)], left: [-0.9, 0], right: [0.9, 0], up: [0, 0.9], down: [0, -0.9],
@@ -88,6 +116,7 @@ export class DemoDevice {
     this.mode = 'Auto';                 // "always" lives in the power module
     this.swarm = !!this.profile.swarm;  // swarm firmware (HE_SWARM): wm<mode>
     this.swarmMode = 'hive';
+    this.activity = '-';                // `wact` (main.cpp refreshes console::setActivity; "-" until then)
     this.swarmCfg = { night: null, blePin: null };   // the swarm's settings as this unit knows them
     this.stored = {};                   // NVS image (keys that differ from the default)
     this.dirty = new Set();
@@ -202,7 +231,7 @@ export class DemoDevice {
       return 'ok defaults reboot';
     }
     if (l === 'reboot') { this.actions({ reboot: true }); return 'ok reboot'; }
-    const single = { n: 'next', b: 'blink', p: 'startle', a: 'appear', d: 'disappear', t: 'toggle', v: 'selftest', c: 'testCard' };
+    const single = { n: 'next', b: 'blink', p: 'startle', a: 'appear', d: 'disappear', m: 'motion', t: 'toggle', v: 'selftest', c: 'testCard' };
     if (l.length === 1 && single[l] && (l !== 'c' || this.caps.has('card'))) {
       if (l === 't') this.mode = this.mode === 'Always' ? 'Auto' : 'Always';
       this.actions({ [single[l]]: true });
@@ -212,6 +241,25 @@ export class DemoDevice {
     if (l[0] === 'w') {   // console.cpp: swarm builds only (w alone is serial)
       if (!this.swarm) return 'err cmd';
       if (l.startsWith('wset ')) return this.swarmSet(l.slice(5));
+      // Motion, visitors, line-up, activity (console.cpp; docs/SCENES.md §SC9, §SC10.3)
+      if (l === 'wvl' || l === 'wvr') { this.actions({ visitor: l === 'wvl' ? 1 : 2 }); return `ok ${l}`; }
+      if (l.startsWith('wvauto ')) {
+        const t = l.slice(7);
+        if (!/^[0-9]{1,3}$/.test(t) || Number(t) > 60) return 'err range wvauto';
+        this.actions({ visitorsAuto: Number(t) });
+        return `ok wvauto ${Number(t)}`;
+      }
+      if (l === 'wline' || l === 'wline +' || l === 'wline -') {
+        this.actions({ lineup: l === 'wline' ? 1 : (l === 'wline +' ? 2 : 0) });
+        return `ok ${l}`;
+      }
+      if (l.startsWith('wline ')) {
+        const list = parseLineup(l.slice(6));
+        if (!list) return 'err range wline';
+        this.actions({ lineupOrder: list });
+        return `ok ${l}`;
+      }
+      if (l === 'wact') return `ok wact ${this.activity}`;
       const act = { b: 1, p: 2, a: 3, n: 4, d: 5 }[l[1]];   // swarm::Action (wd: disappear now)
       if (l.length === 2 && act) {
         this.actions({ swarmAction: act });

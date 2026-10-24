@@ -2,10 +2,10 @@
 // firmware's command processor in JS) and a running Director, so status, pins and restarts behave
 // like a real unit. DOM-free; usable from Node with injected styles.
 
-import { Director, CUE_NONE, CUE_VANISH } from '../director.js?v=fdf99b96fa';
-import { compileRoutine, RoutinePlayer } from '../routine.js?v=fdf99b96fa';
-import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js?v=fdf99b96fa';
-import { schemaHash } from './settings_schema.js?v=fdf99b96fa';
+import { Director, CUE_NONE, CUE_VANISH } from '../director.js?v=f2f2c73996';
+import { compileRoutine, RoutinePlayer } from '../routine.js?v=f2f2c73996';
+import { DemoDevice, PROFILES, SWARM_MODE_NAMES, SWARM_MODE_LETTERS } from './protocol.js?v=f2f2c73996';
+import { schemaHash } from './settings_schema.js?v=f2f2c73996';
 
 const TICK_MS = 1000 / 24;
 const PHASES = ['Dark', 'Appear', 'Watch', 'Transition', 'Vanish', 'Startle'];
@@ -57,6 +57,7 @@ export class MockLink {
 
   tick() {
     this.device.poll();
+    if (this.device.swarm) this.updateDemoActivity();
     this.simMs += TICK_MS;
     const p = this.pending;
     this.pending = {};
@@ -71,12 +72,36 @@ export class MockLink {
     this.fs = this.director.update(this.simMs, inputs);
   }
 
+  /** The demo's `wact` read-out after a motion: the first gets the big scare, the next ones less. */
+  demoMotion() {
+    const now = Date.now();
+    const recent = this.demoLastMotion && now - this.demoLastMotion < 45000;
+    this.demoTokens = Math.max(0, (this.demoTokens ?? 3) - (recent ? 0 : 1));
+    this.demoOutcome = recent ? 'cooldown' : (this.demoTokens > 0 ? 'big' : 'look');
+    if (!recent) this.demoLastMotion = now;
+    this.demoLastSeen = now;
+    this.updateDemoActivity();
+  }
+
+  updateDemoActivity() {
+    const ago = this.demoLastSeen ? Math.round((Date.now() - this.demoLastSeen) / 1000) : '-';
+    const v = Number.isInteger(this.demoVisitors) ? this.demoVisitors : 0;
+    this.device.activity = `fresh ${this.demoTokens ?? 3} 0 - ${this.demoOutcome || 'none'} ${ago} ${this.demoOutcome ? 2 : '-'} ` +
+      `${v} ${this.demoOrder ? 2 : '-'} ${this.demoLineup || 0} 3`;
+  }
+
   onAction(a) {
     if (a.next) this.pending.next = true;
     if (a.blink) this.pending.blink = true;
     if (a.startle) this.pending.startle = true;
     if (a.appear) this.pending.appear = true;
     if (a.disappear) this.pending.disappear = true;
+    // The demo swarm (this unit and two that are not drawn): motion, visitors and line-up, roughly.
+    if (a.motion) { this.pending.pir = true; this.demoMotion('big'); }
+    if (a.visitor) setTimeout(() => { this.pending.startle = true; this.demoMotion('big'); }, 1500);
+    if (Number.isInteger(a.visitorsAuto)) this.demoVisitors = a.visitorsAuto;
+    if (Number.isInteger(a.lineup)) this.demoLineup = a.lineup;
+    if (a.lineupOrder) this.demoOrder = a.lineupOrder.length ? 1 : null;
     if (a.wink) this.pending.wink = a.wink;
     if (a.look !== undefined) this.look = a.look;   // null = free
     if (a.routine === null) this.player = null;

@@ -2,10 +2,10 @@
 // drawn small. A thumbnail is one settled Watch frame; the live preview animates one style.
 // Browser-only (canvas), but the frame logic (settledFrame) is DOM-free.
 
-import { Director } from '../director.js?v=fdf99b96fa';
-import { prepareEye, renderRect, createEyeUniforms } from '../renderer.js?v=fdf99b96fa';
-import { rgb565To888 } from '../color.js?v=fdf99b96fa';
-import { PANELS } from '../constants.js?v=fdf99b96fa';
+import { Director } from '../director.js?v=f2f2c73996';
+import { prepareEye, renderRect, createEyeUniforms } from '../renderer.js?v=f2f2c73996';
+import { rgb565To888 } from '../color.js?v=f2f2c73996';
+import { PANELS } from '../constants.js?v=f2f2c73996';
 
 const TICK_MS = 1000 / 24;
 const WATCH = 2;
